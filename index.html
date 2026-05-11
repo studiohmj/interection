@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1920">
+  <title>BLOOM — Hand Interaction</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ── LOADING ─────────────────────────────────────── -->
+<div id="loading" style="position:fixed;inset:0;background:#060607;z-index:2000;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:22px;">
+  <p style="font-size:11px;font-weight:300;letter-spacing:6px;text-transform:uppercase;color:rgba(236,234,227,0.25)" id="ld-msg">Initializing</p>
+  <div style="width:140px;height:1px;background:rgba(236,234,227,0.07);overflow:hidden">
+    <div id="ld-fill" style="height:100%;width:0%;background:#FF4FA3;transition:width 0.5s"></div>
+  </div>
+</div>
+
+<!-- ── MAIN CANVAS (flower + petals) ─────────────── -->
+<canvas id="canvas"></canvas>
+
+<!-- ── HAND SKELETON OVERLAY ─────────────────────── -->
+<canvas id="lm-canvas"></canvas>
+
+<!-- ── CURSOR ─────────────────────────────────────── -->
+<div id="cursor"></div>
+
+<!-- ── HIDDEN WEBCAM VIDEO ───────────────────────── -->
+<video id="webcam" autoplay playsinline muted></video>
+
+<!-- ── FLOWER VIDEO (full-screen, hand-controlled) ── -->
+<video id="flower-vid" muted playsinline preload="auto">
+  <source src="media/flower.mp4" type="video/mp4">
+</video>
+
+<!-- ════════════════════════════════════════════════
+     STAGE 0 — VIDEO HOME
+════════════════════════════════════════════════ -->
+<div id="st-video" class="stage active">
+  <div class="vid-overlay">
+    <p class="vid-eyebrow">BLOOM · 2026</p>
+
+    <div class="vid-mid">
+      <h1 class="vid-title">
+        <span class="vt-thin">HANDS</span>
+        <span class="vt-bold">BLOOM</span>
+      </h1>
+      <p class="vid-ko">손의 움직임이 꽃의 생명을 결정합니다</p>
+      <p class="vid-en">Open your hand · Watch the flower bloom</p>
+      <div class="vid-status">
+        <span class="vst-dot" id="vst-dot"></span>
+        <span id="vst-label">마우스를 움직이거나 카메라를 허용하세요</span>
+      </div>
+    </div>
+
+    <div class="vid-acts">
+      <button id="btn-vid-cam" class="btn-vid-cam">Allow Camera →</button>
+      <button id="btn-vid-canvas" class="btn-vid-canvas">Enter Canvas Experience</button>
+      <button id="btn-vid-guide" class="btn-vid-guide">Gesture Guide ↗</button>
+    </div>
+  </div>
+
+  <!-- bloom bar (left side) -->
+  <div class="vb-wrap">
+    <span class="vb-label">OPEN</span>
+    <div class="vb-track"><div id="vb-fill" class="vb-fill"></div></div>
+    <span class="vb-label">CLOSE</span>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     STAGE 1 — INTRO
+════════════════════════════════════════════════ -->
+<div id="st-intro" class="stage">
+
+  <div class="intro-wrap">
+    <p class="intro-label">Hand Interaction · 2026</p>
+
+    <h1 class="intro-title">
+      <span class="it-thin">HANDS</span>
+      <span class="it-bold">BLOOM</span>
+    </h1>
+
+    <p class="intro-ko">손의 형태가 꽃의 생명을 결정한다.</p>
+    <p class="intro-en">A gesture becomes memory.</p>
+
+    <button id="btn-begin" class="btn-begin">
+      Begin Experience
+      <span class="btn-arrow">→</span>
+    </button>
+  </div>
+
+  <div class="intro-bottom">
+    <span>Pretendard · HTML · CSS · JavaScript · MediaPipe</span>
+  </div>
+
+</div>
+
+<!-- ════════════════════════════════════════════════
+     STAGE 2 — INTERACTION
+════════════════════════════════════════════════ -->
+<div id="st-interact" class="stage">
+
+  <!-- top-right: tracking status -->
+  <div id="tracking-ui" class="tracking-ui">
+    <span class="t-dot" id="t-dot"></span>
+    <span id="t-label">Waiting for camera</span>
+    <button id="btn-skel" class="btn-skel" title="Toggle skeleton">⬡</button>
+  </div>
+
+  <!-- cam preview (bottom-left) -->
+  <div id="cam-preview" class="cam-preview hidden">
+    <video id="cam-vid" autoplay playsinline muted></video>
+    <span>CAM</span>
+  </div>
+
+  <!-- guide overlay (fades out after interaction) -->
+  <div id="guide-overlay" class="guide-overlay">
+    <p class="guide-ko">손을 펼치면 꽃이 피고<br>손을 쥐면 꽃이 집니다.</p>
+    <p class="guide-en">Open your hand to bloom · Close to wither</p>
+    <div class="guide-modes">
+      <span id="mode-cam" class="mode-btn active-mode">☽ Camera</span>
+      <span class="mode-sep">·</span>
+      <span id="mode-mouse" class="mode-btn">⊙ Mouse</span>
+    </div>
+  </div>
+
+  <!-- bloom progress bar (left side) -->
+  <div id="bloom-bar-wrap" class="bloom-bar-wrap">
+    <span class="bloom-label-top">OPEN</span>
+    <div class="bloom-bar-track">
+      <div id="bloom-bar-fill" class="bloom-bar-fill"></div>
+    </div>
+    <span class="bloom-label-bot">CLOSE</span>
+  </div>
+
+  <!-- end button (top-left) -->
+  <button id="btn-end" class="btn-end">× End</button>
+
+  <!-- gesture guide button (top-center) -->
+  <button id="btn-guide" class="btn-guide">Gesture Guide</button>
+
+  <!-- real-time gesture indicator -->
+  <div id="gest-indicator" class="gest-indicator">
+    <span class="gi-dot"></span>
+    <span id="gest-label"></span>
+  </div>
+
+  <!-- object selector — bottom right -->
+  <div id="obj-selector" class="obj-selector">
+    <button class="obj-btn active" data-idx="0">Peony</button>
+    <button class="obj-btn" data-idx="1">Lotus</button>
+    <button class="obj-btn" data-idx="2">Crystal</button>
+    <button class="obj-btn" data-idx="3">Dandelion</button>
+  </div>
+
+  <!-- hold indicator — appears on mousedown in mouse mode -->
+  <div id="hold-indicator" class="hold-indicator">Withering</div>
+
+</div>
+
+<!-- ════════════════════════════════════════════════
+     STAGE 3 — GUIDE (camera request)
+════════════════════════════════════════════════ -->
+<div id="st-guide" class="stage">
+  <div class="guide-card">
+    <p class="gc-num">01</p>
+    <h2 class="gc-title">카메라 권한이<br>필요합니다.</h2>
+    <p class="gc-body">웹캠을 통해 손의 움직임을 감지합니다.<br>권한을 허용하면 바로 시작됩니다.</p>
+    <div class="gc-actions">
+      <button id="btn-allow" class="btn-allow">Allow Camera →</button>
+      <button id="btn-skip" class="btn-skip">마우스로 체험하기</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     STAGE 4 — ENDING
+════════════════════════════════════════════════ -->
+<div id="st-end" class="stage">
+  <div class="end-wrap">
+    <p class="end-quote">
+      The flower remembers<br>the shape of <em>your hand.</em>
+    </p>
+    <p class="end-ko">경험은 기억이 됩니다.</p>
+    <button id="btn-restart" class="btn-restart">Experience Again →</button>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     STAGE 5 — GESTURE GUIDE
+════════════════════════════════════════════════ -->
+<div id="st-gestures" class="stage">
+  <div class="gg-page">
+    <div class="gg-header">
+      <button id="btn-gg-back" class="btn-gg-back">← Back</button>
+      <div class="gg-title-block">
+        <p class="gg-eyebrow">HANDS BLOOM · 2026</p>
+        <h2 class="gg-title">Gesture Guide</h2>
+        <p class="gg-subtitle">손 모양에 따라 다른 인터렉션이 활성화됩니다<br>카메라 모드에서만 작동합니다</p>
+      </div>
+    </div>
+
+    <div class="gg-grid">
+
+      <div class="gg-card">
+        <div class="gg-sym">✋</div>
+        <p class="gg-cname">Open Hand</p>
+        <p class="gg-cdesc">손가락을 모두 펼치면<br>꽃이 활짝 피어납니다</p>
+        <span class="gg-ctag pink">BLOOM</span>
+      </div>
+
+      <div class="gg-card">
+        <div class="gg-sym">✊</div>
+        <p class="gg-cname">Closed Fist</p>
+        <p class="gg-cdesc">주먹을 꽉 쥐면<br>꽃이 천천히 시들어 집니다</p>
+        <span class="gg-ctag dim">WITHER</span>
+      </div>
+
+      <div class="gg-card">
+        <div class="gg-sym">✌</div>
+        <p class="gg-cname">Peace Sign</p>
+        <p class="gg-cdesc">브이를 만들면 꽃잎 폭풍이<br>화면 전체를 가득 채웁니다</p>
+        <span class="gg-ctag rose">PETAL STORM</span>
+      </div>
+
+      <div class="gg-card">
+        <div class="gg-sym">☝</div>
+        <p class="gg-cname">Pointing</p>
+        <p class="gg-cdesc">검지로 가리키면 빛의 광선이<br>손끝에서 꽃 중심으로 뻗습니다</p>
+        <span class="gg-ctag gold">SPOTLIGHT</span>
+      </div>
+
+      <div class="gg-card">
+        <div class="gg-sym">🤘</div>
+        <p class="gg-cname">Rock Sign</p>
+        <p class="gg-cdesc">록 사인을 만들 때마다<br>꽃의 색상 테마가 바뀝니다</p>
+        <span class="gg-ctag purple">COLOR SHIFT × 4</span>
+      </div>
+
+      <div class="gg-card">
+        <div class="gg-sym">🤏</div>
+        <p class="gg-cname">Pinch</p>
+        <p class="gg-cdesc">엄지와 검지를 모으면<br>꽃의 시간이 느려집니다</p>
+        <span class="gg-ctag cyan">SLOW TIME</span>
+      </div>
+
+      <div class="gg-card">
+        <div class="gg-sym">👍</div>
+        <p class="gg-cname">Thumbs Up</p>
+        <p class="gg-cdesc">엄지를 세우면 꽃이<br>순식간에 만개합니다</p>
+        <span class="gg-ctag gold">INSTANT BLOOM</span>
+      </div>
+
+      <div class="gg-card">
+        <div class="gg-sym">🖐</div>
+        <p class="gg-cname">Hand Position</p>
+        <p class="gg-cdesc">손의 위치에 따라 꽃의<br>중심이 이동합니다</p>
+        <span class="gg-ctag pink">PARALLAX</span>
+      </div>
+
+    </div>
+
+    <p class="gg-note">손가락 개수 (1→4) = Peony · Lotus · Crystal · Dandelion 자동 선택</p>
+  </div>
+</div>
+
+<!-- MediaPipe -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+<script src="script.js"></script>
+</body>
+</html>
