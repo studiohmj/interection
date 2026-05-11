@@ -980,7 +980,9 @@ function detectGesture(lm) {
 
   const thumbTip = lm[4], thumbIP = lm[3], indexMCP = lm[5];
   const thumbSide = Math.hypot(thumbTip.x - indexMCP.x, thumbTip.y - indexMCP.y) > 0.07;
-  const thumbUp   = thumbTip.y < thumbIP.y - 0.02 && !ext[0] && !ext[1] && !ext[2] && !ext[3];
+  /* thumbsup: thumb pointing up + all fingers loosely closed (allow 1 stray) */
+  const thumbUp   = thumbTip.y < thumbIP.y - 0.02 && extN <= 1;
+  /* pinch: thumb-index tip distance + middle/ring/pinky closed */
   const pinchDist = Math.hypot(thumbTip.x - lm[8].x, thumbTip.y - lm[8].y);
 
   const openRatio = Math.min(1, (extN + (thumbSide ? 1 : 0)) / 5);
@@ -989,13 +991,13 @@ function detectGesture(lm) {
   const palmPos = { x: lm[9].x, y: lm[9].y };
 
   let gesture = 'neutral';
-  if      (pinchDist < 0.055 && !ext[1] && !ext[2] && !ext[3]) gesture = 'pinch';
+  if      (pinchDist < 0.065 && !ext[1] && !ext[2] && !ext[3]) gesture = 'pinch';
   else if (ext[0] && !ext[1] && !ext[2] && !ext[3])             gesture = 'point';
-  else if (ext[0] && ext[1] && !ext[2] && !ext[3])              gesture = 'peace';
+  else if (ext[0] && ext[1] && !ext[3] && extN <= 3)            gesture = 'peace';
   else if (ext[0] && !ext[1] && !ext[2] && ext[3])              gesture = 'rock';
   else if (thumbUp)                                              gesture = 'thumbsup';
   else if (openRatio >= 0.75)                                    gesture = 'open';
-  else if (openRatio === 0 && !thumbUp)                          gesture = 'fist';
+  else if (openRatio < 0.15)                                     gesture = 'fist';
 
   return { gesture, openRatio, indexTip: lm[8], palmPos, extN };
 }

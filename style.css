@@ -782,6 +782,7 @@ body.hovering #cursor {
   display: flex;
   align-items: flex-start;
   justify-content: center;
+  transition: opacity 0.45s var(--ease);  /* faster than default 1.4s */
 }
 
 .gg-page {
@@ -855,14 +856,15 @@ body.hovering #cursor {
 }
 .gg-card:hover { background: rgba(255,79,163,0.035); }
 
-.gg-card:nth-child(1) { animation-delay: 0.08s; }
-.gg-card:nth-child(2) { animation-delay: 0.16s; }
-.gg-card:nth-child(3) { animation-delay: 0.24s; }
-.gg-card:nth-child(4) { animation-delay: 0.32s; }
-.gg-card:nth-child(5) { animation-delay: 0.40s; }
-.gg-card:nth-child(6) { animation-delay: 0.48s; }
-.gg-card:nth-child(7) { animation-delay: 0.56s; }
-.gg-card:nth-child(8) { animation-delay: 0.64s; }
+/* delays start after the 0.45s stage fade completes */
+.gg-card:nth-child(1) { animation-delay: 0.30s; }
+.gg-card:nth-child(2) { animation-delay: 0.42s; }
+.gg-card:nth-child(3) { animation-delay: 0.54s; }
+.gg-card:nth-child(4) { animation-delay: 0.66s; }
+.gg-card:nth-child(5) { animation-delay: 0.78s; }
+.gg-card:nth-child(6) { animation-delay: 0.90s; }
+.gg-card:nth-child(7) { animation-delay: 1.02s; }
+.gg-card:nth-child(8) { animation-delay: 1.14s; }
 
 @keyframes ggIn {
   from { opacity: 0; transform: translateY(18px); }
