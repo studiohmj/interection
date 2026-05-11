@@ -26,12 +26,14 @@ const G = {
   colorAngle: 0,
   timeScale:  1.0,
   indexTip:   null,
-  palmPos:    null,     // {x,y} normalized, for parallax
+  palmPos:    null,
   gestLabel:  '',
-  lastStorm:  0,
-  lastBoost:  0,
-  parallaxX:  0,        // smoothed parallax offset (px)
-  parallaxY:  0,
+  lastStorm:    0,
+  lastBoost:    0,
+  lastRock:     0,
+  rockHeldSince:0,   // dwell timer for rock
+  parallaxX:    0,
+  parallaxY:    0,
 };
 
 const setTarget = v => { S.target = Math.max(0, Math.min(1, v)); };
@@ -943,9 +945,9 @@ function drawSkeleton(lm) {
 
 }
 
-/* draw hand skeleton on cam-preview canvas */
+/* draw hand skeleton(s) on cam-preview canvas */
 let _camSkelEl = null, _camSkelCtx = null;
-function drawCamSkeleton(lm) {
+function drawCamSkeleton(lmArray) {
   if (!_camSkelEl) _camSkelEl = document.getElementById('cam-skel');
   if (!_camSkelEl) return;
   const box = _camSkelEl.parentElement;
@@ -955,22 +957,50 @@ function drawCamSkeleton(lm) {
   if (!_camSkelCtx) _camSkelCtx = _camSkelEl.getContext('2d');
   const cx = _camSkelCtx;
   cx.clearRect(0, 0, w, h);
-  if (!lm) return;
+  if (!lmArray.length) return;
 
-  const pt = i => ({ x: (1 - lm[i].x) * w, y: lm[i].y * h });
+  for (const lm of lmArray) {
+    const pt = i => ({ x: (1 - lm[i].x) * w, y: lm[i].y * h });
 
-  cx.strokeStyle = 'rgba(255,79,163,0.80)';
-  cx.lineWidth = 1.8; cx.lineCap = 'round';
-  CONN.forEach(([a, b]) => {
-    const pa = pt(a), pb = pt(b);
-    cx.beginPath(); cx.moveTo(pa.x, pa.y); cx.lineTo(pb.x, pb.y); cx.stroke();
-  });
-  for (let i = 0; i < 21; i++) {
-    const p = pt(i);
-    cx.beginPath();
-    cx.arc(p.x, p.y, TIPS.has(i) ? 3.5 : 2, 0, Math.PI * 2);
-    cx.fillStyle = TIPS.has(i) ? 'rgba(255,79,163,0.95)' : 'rgba(255,255,255,0.85)';
-    cx.fill();
+    /* bone connections — thin, semi-transparent */
+    cx.lineWidth = 0.85; cx.lineCap = 'round';
+    CONN.forEach(([a, b]) => {
+      const pa = pt(a), pb = pt(b);
+      /* finger bones slightly brighter than palm connections */
+      const isPalm = (a === 0 || b === 0 || (a >= 5 && a <= 17 && b >= 5 && b <= 17));
+      cx.strokeStyle = isPalm ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.50)';
+      cx.beginPath(); cx.moveTo(pa.x, pa.y); cx.lineTo(pb.x, pb.y); cx.stroke();
+    });
+
+    /* joints */
+    for (let i = 0; i < 21; i++) {
+      const p = pt(i);
+      if (TIPS.has(i)) {
+        /* fingertips: pink glow */
+        cx.beginPath();
+        cx.arc(p.x, p.y, 2.8, 0, Math.PI * 2);
+        cx.fillStyle = 'rgba(255,79,163,0.90)';
+        cx.fill();
+        /* outer ring */
+        cx.beginPath();
+        cx.arc(p.x, p.y, 4.2, 0, Math.PI * 2);
+        cx.strokeStyle = 'rgba(255,79,163,0.30)';
+        cx.lineWidth = 0.8;
+        cx.stroke();
+      } else if (i === 0) {
+        /* wrist */
+        cx.beginPath();
+        cx.arc(p.x, p.y, 2.5, 0, Math.PI * 2);
+        cx.fillStyle = 'rgba(255,255,255,0.55)';
+        cx.fill();
+      } else {
+        /* knuckles */
+        cx.beginPath();
+        cx.arc(p.x, p.y, 1.4, 0, Math.PI * 2);
+        cx.fillStyle = 'rgba(255,255,255,0.40)';
+        cx.fill();
+      }
+    }
   }
 }
 
@@ -990,31 +1020,36 @@ const GESTURE_LABELS = {
 const COLOR_ANGLES = [0, 200, 285, 48]; // pink, teal, purple, gold
 
 function detectGesture(lm) {
-  const tips  = [8, 12, 16, 20];
-  const pips  = [6, 10, 14,  18];
-  const ext   = tips.map((t, i) => lm[t].y < lm[pips[i]].y - 0.012);
-  const extN  = ext.filter(Boolean).length;
+  const tips = [8, 12, 16, 20];
+  const pips = [6, 10, 14, 18];
+  /* finger extended = tip clearly above PIP joint */
+  const ext  = tips.map((t, i) => lm[t].y < lm[pips[i]].y - 0.015);
+  const extN = ext.filter(Boolean).length;
 
-  const thumbTip = lm[4], thumbIP = lm[3], indexMCP = lm[5];
-  const thumbSide = Math.hypot(thumbTip.x - indexMCP.x, thumbTip.y - indexMCP.y) > 0.07;
-  /* thumbsup: thumb pointing up + all fingers loosely closed (allow 1 stray) */
-  const thumbUp   = thumbTip.y < thumbIP.y - 0.02 && extN <= 1;
-  /* pinch: thumb-index tip distance + middle/ring/pinky closed */
-  const pinchDist = Math.hypot(thumbTip.x - lm[8].x, thumbTip.y - lm[8].y);
+  const thumbTip = lm[4], thumbIP = lm[3];
 
-  const openRatio = Math.min(1, (extN + (thumbSide ? 1 : 0)) / 5);
+  /* thumbsup: thumb clearly pointing up, ALL other fingers closed (no stray) */
+  const thumbUp = thumbTip.y < thumbIP.y - 0.04 && extN === 0;
 
-  /* palm center for parallax */
+  /* pinch: thumb-index distance < threshold AND index finger raised above MCP
+     (prevents fist from triggering pinch when thumb is near folded index) */
+  const pinchDist  = Math.hypot(thumbTip.x - lm[8].x, thumbTip.y - lm[8].y);
+  const indexRaised = lm[8].y < lm[5].y;   // index tip above index MCP
+  const isPinch    = pinchDist < 0.07 && indexRaised && !ext[1] && !ext[2] && !ext[3];
+
+  /* openRatio: 4 fingers only, thumb excluded */
+  const openRatio = extN / 4;
+
   const palmPos = { x: lm[9].x, y: lm[9].y };
 
   let gesture = 'neutral';
-  if      (pinchDist < 0.065 && !ext[1] && !ext[2] && !ext[3]) gesture = 'pinch';
-  else if (ext[0] && !ext[1] && !ext[2] && !ext[3])             gesture = 'point';
-  else if (ext[0] && ext[1] && !ext[3] && extN <= 3)            gesture = 'peace';
-  else if (ext[0] && !ext[1] && !ext[2] && ext[3])              gesture = 'rock';
-  else if (thumbUp)                                              gesture = 'thumbsup';
-  else if (openRatio >= 0.75)                                    gesture = 'open';
-  else if (openRatio < 0.15)                                     gesture = 'fist';
+  if      (isPinch)                                    gesture = 'pinch';
+  else if (ext[0] && !ext[1] && !ext[2] && !ext[3])   gesture = 'point';
+  else if (ext[0] && ext[1] && !ext[3] && extN <= 3)  gesture = 'peace';
+  else if (ext[0] && !ext[1] && !ext[2] && ext[3])    gesture = 'rock';
+  else if (thumbUp)                                    gesture = 'thumbsup';
+  else if (openRatio >= 0.75)                          gesture = 'open';
+  else if (openRatio <= 0.25)                          gesture = 'fist';
 
   return { gesture, openRatio, indexTip: lm[8], palmPos, extN };
 }
@@ -1029,20 +1064,10 @@ function handleGestureChange(gesture) {
     spawnPetals(40, true);
     G.lastBoost = Date.now();
   }
-  if (gesture === 'rock') {
-    G.colorMode = (G.colorMode + 1) % COLOR_ANGLES.length;
-  }
+  /* rock: handled via dwell timer in onResults, not here */
 }
 
-/* finger count (1→4 extended) selects renderer — only on neutral/open/fist */
-function checkFingerCountRenderer(extN, prevExtN) {
-  if (extN === prevExtN) return;
-  if (!['neutral', 'open', 'fist'].includes(G.gesture)) return;
-  if      (extN === 1) cycleRenderer(0);
-  else if (extN === 2) cycleRenderer(1);
-  else if (extN === 3) cycleRenderer(2);
-  else if (extN === 4) cycleRenderer(3);
-}
+
 
 /* ═══════════════════════════════════════════
    CAMERA TRACKING
@@ -1070,35 +1095,57 @@ async function startCamera() {
     locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
   });
   hands.setOptions({
-    maxNumHands:1, modelComplexity:0,
+    maxNumHands:2, modelComplexity:0,
     minDetectionConfidence:0.65, minTrackingConfidence:0.50,
   });
   hands.onResults(res => {
-    if (res.multiHandLandmarks?.length > 0) {
-      const lm = res.multiHandLandmarks[0];
+    const lms = res.multiHandLandmarks;
+    if (lms?.length > 0) {
       S.handOn = true; S.lastHand = Date.now();
 
-      const { gesture, openRatio, indexTip, palmPos, extN } = detectGesture(lm);
+      /* primary hand: gesture + index tip */
+      const lm0 = lms[0];
+      const { gesture, openRatio: ratio0, indexTip, palmPos: palm0, extN } = detectGesture(lm0);
 
-      smoothedOpen += (openRatio - smoothedOpen) * 0.28;
+      /* second hand: only bloom (no gesture override) */
+      let avgRatio = ratio0;
+      let avgPalm  = palm0;
+      if (lms.length > 1) {
+        const { openRatio: ratio1, palmPos: palm1 } = detectGesture(lms[1]);
+        avgRatio = (ratio0 + ratio1) / 2;
+        avgPalm  = { x: (palm0.x + palm1.x) / 2, y: (palm0.y + palm1.y) / 2 };
+      }
 
-      /* gesture change handling */
+      smoothedOpen += (avgRatio - smoothedOpen) * 0.42;
+
       G.prevGesture = G.gesture;
       G.gesture     = gesture;
       G.indexTip    = indexTip;
-      G.palmPos     = palmPos;
+      G.palmPos     = avgPalm;
 
       if (G.gesture !== G.prevGesture) handleGestureChange(gesture);
 
-      /* finger count → auto-select renderer (only in interact) */
-      if (S.stage === 'interact') checkFingerCountRenderer(extN, prevExtN);
+      /* rock: only cycle color after holding 600ms + 3.5s global cooldown */
+      if (gesture === 'rock') {
+        if (!G.rockHeldSince) G.rockHeldSince = Date.now();
+        if (Date.now() - G.rockHeldSince > 600 && Date.now() - G.lastRock > 3500) {
+          G.colorMode    = (G.colorMode + 1) % COLOR_ANGLES.length;
+          G.lastRock     = Date.now();
+          G.rockHeldSince = 0;
+        }
+      } else {
+        G.rockHeldSince = 0;
+      }
+
       prevExtN = extN;
 
-      /* set bloom target (pinch/thumbsup override in loop) */
-      if (gesture !== 'thumbsup') setTarget(smoothedOpen);
+      /* bloom target: fist→0, open→1, others proportional */
+      if      (gesture === 'fist')     setTarget(0);
+      else if (gesture === 'open')     setTarget(1);
+      else if (gesture !== 'thumbsup') setTarget(smoothedOpen);
 
-      drawSkeleton(lm);
-      drawCamSkeleton(lm);
+      drawSkeleton(lm0);
+      drawCamSkeleton(lms);
     } else {
       if (Date.now() - S.lastHand > 1800) {
         S.handOn = false; setTarget(0.12);
@@ -1106,7 +1153,7 @@ async function startCamera() {
         G.indexTip = null; G.palmPos = null;
       }
       drawSkeleton(null);
-      drawCamSkeleton(null);
+      drawCamSkeleton([]);
     }
     refreshStatus();
   });
