@@ -429,20 +429,26 @@ body.hovering #cursor {
 .cam-preview {
   position: absolute;
   bottom: 44px; left: 52px;
-  width: 148px; height: 112px;
+  width: 200px; height: 150px;
   border-radius: 6px;
   overflow: hidden;
   border: 1px solid var(--border);
-  opacity: 0.4;
+  opacity: 0.55;
   transition: opacity 0.3s;
 }
-.cam-preview:hover { opacity: 0.8; }
+.cam-preview:hover { opacity: 0.9; }
 .cam-preview.hidden { display: none; }
 .cam-preview video { width:100%; height:100%; object-fit:cover; transform:scaleX(-1); display:block; }
+.cam-preview canvas {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+}
 .cam-preview span {
   position: absolute; bottom:6px; left:8px;
   font-size:9px; letter-spacing:3px;
   color:rgba(255,255,255,0.5);
+  z-index: 1;
 }
 
 /* guide overlay — center bottom */
@@ -918,3 +924,81 @@ body.hovering #cursor {
 
 /* canvas color mode transition */
 #canvas { transition: filter 1.4s var(--ease); }
+
+/* ═══════════════════════════════════
+   TOUCH DEVICES — cursor reset
+═══════════════════════════════════ */
+@media (hover: none) {
+  body    { cursor: auto; }
+  button  { cursor: pointer; }
+  #cursor { display: none; }
+}
+
+/* ═══════════════════════════════════
+   MOBILE  ≤ 768px
+═══════════════════════════════════ */
+@media (max-width: 768px) {
+
+  /* ── VIDEO STAGE ── */
+  .vid-overlay { padding: 28px 20px 36px; }
+  .vt-thin, .vt-bold {
+    font-size: clamp(48px, 15vw, 80px);
+    letter-spacing: -2px;
+  }
+  .vid-ko    { font-size: 14px; }
+  .vid-en    { font-size: 10px; letter-spacing: 2px; }
+  .vid-status{ font-size: 10px; letter-spacing: 2px; }
+  .btn-vid-cam { padding: 14px 28px; font-size: 12px; letter-spacing: 3px; }
+  .vb-wrap   { left: 14px; }
+  .vb-track  { height: 100px; }
+
+  /* ── INTRO ── */
+  .it-thin, .it-bold {
+    font-size: clamp(56px, 16vw, 100px);
+    letter-spacing: -2px;
+  }
+  .intro-label { margin-bottom: 28px; }
+  .intro-ko    { font-size: 15px; }
+  .intro-en    { margin-bottom: 40px; }
+  .btn-begin   { padding: 15px 28px; letter-spacing: 3px; }
+  .intro-bottom{ bottom: 24px; font-size: 9px; }
+
+  /* ── INTERACT ── */
+  .tracking-ui    { top: 16px; right: 16px; font-size: 10px; letter-spacing: 2px; }
+  .btn-end        { top: 16px; left: 16px; font-size: 12px; }
+  .btn-guide      { top: 16px; font-size: 9px; padding: 6px 12px; letter-spacing: 3px; }
+  .gest-indicator { top: 66px; font-size: 9px; padding: 5px 12px; letter-spacing: 3px; }
+  .bloom-bar-wrap { left: 10px; }
+  .bloom-bar-track{ height: 100px; }
+  .cam-preview    { width: 140px; height: 105px; bottom: 24px; left: 16px; }
+  .guide-overlay  { bottom: 56px; }
+  .guide-ko       { font-size: 14px; }
+  .guide-en       { font-size: 10px; letter-spacing: 2px; }
+  .guide-modes    { font-size: 10px; }
+  .obj-selector   { bottom: 20px; right: 12px; }
+  .obj-btn        { font-size: 10px; padding: 8px 0 8px 16px; }
+  .hold-indicator { bottom: 80px; }
+
+  /* ── CAMERA GUIDE ── */
+  .guide-card { padding: 40px 24px; max-width: 100%; }
+  .gc-title   { font-size: 34px; letter-spacing: -1px; }
+  .gc-body    { font-size: 13px; }
+  .btn-allow  { padding: 14px 24px; }
+
+  /* ── GESTURE GUIDE ── */
+  .gg-page    { padding: 28px 16px 52px; }
+  .gg-header  { margin-bottom: 36px; gap: 20px; }
+  .gg-title   { font-size: clamp(26px, 8vw, 48px); }
+  .gg-subtitle{ font-size: 12px; }
+  .gg-grid    { grid-template-columns: repeat(2, 1fr); }
+  .gg-card    { padding: 24px 16px 20px; gap: 7px; }
+  .gg-sym     { font-size: 32px; margin-bottom: 2px; }
+  .gg-cname   { font-size: 10px; letter-spacing: 2px; }
+  .gg-cdesc   { font-size: 12px; }
+  .gg-note    { font-size: 9px; letter-spacing: 2px; }
+
+  /* ── END ── */
+  .end-quote  { letter-spacing: -1px; }
+  .end-ko     { font-size: 13px; }
+  .btn-restart{ padding: 14px 22px; }
+}

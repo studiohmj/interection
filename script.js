@@ -35,7 +35,17 @@ const G = {
 };
 
 const setTarget = v => { S.target = Math.max(0, Math.min(1, v)); };
-const setCSS    = () => document.documentElement.style.setProperty('--bloom', S.bloom.toFixed(3));
+
+let _lastBloomCSS = '';
+const setCSS = () => {
+  const s = S.bloom.toFixed(3);
+  if (s !== _lastBloomCSS) { document.documentElement.style.setProperty('--bloom', s); _lastBloomCSS = s; }
+};
+
+const isMobile  = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+const FRAME_MS  = isMobile ? 34 : 0;   // 30fps cap on mobile, uncapped on desktop
+let   _lastFrameT = 0;
+let   _lastFilterStr = '';
 
 /* ═══════════════════════════════════════════
    CANVAS
@@ -784,7 +794,7 @@ const PCLR = [
   '#FF4FA3','#FF74B8','#FB8EC4','#F9A8D4',
   '#FECDD3','#EC4899','#E879A0','#FF6BB5',
 ];
-const MAX_P = 240;
+const MAX_P = isMobile ? 80 : 150;
 let petals = [];
 
 class Petal {
@@ -861,17 +871,9 @@ class Petal {
     ctx.translate(this.x, this.y);
     ctx.rotate(this.rot);
     ctx.globalAlpha = this.alpha;
-    ctx.shadowColor = this.clr;
-    ctx.shadowBlur  = 4 + this.depth * 10;
+    ctx.fillStyle   = this.clr;
 
     const s = this.size;
-    /* gradient on petal for richness */
-    const g = ctx.createLinearGradient(0, -s, 0, s);
-    g.addColorStop(0,   this.clr + 'CC');
-    g.addColorStop(0.5, this.clr);
-    g.addColorStop(1,   this.clr + '88');
-    ctx.fillStyle = g;
-
     if (this.slim) {
       const w = s * 0.33;
       ctx.beginPath();
@@ -939,22 +941,37 @@ function drawSkeleton(lm) {
     lx.restore();
   }
 
-  if (!S.showSkel) return;
+}
 
-  lx.strokeStyle = 'rgba(255,79,163,0.28)';
-  lx.lineWidth = 1; lx.lineCap = 'round';
-  CONN.forEach(([a,b]) => {
-    lx.beginPath();
-    lx.moveTo((1-lm[a].x)*W, lm[a].y*H);
-    lx.lineTo((1-lm[b].x)*W, lm[b].y*H);
-    lx.stroke();
+/* draw hand skeleton on cam-preview canvas */
+let _camSkelEl = null, _camSkelCtx = null;
+function drawCamSkeleton(lm) {
+  if (!_camSkelEl) _camSkelEl = document.getElementById('cam-skel');
+  if (!_camSkelEl) return;
+  const box = _camSkelEl.parentElement;
+  const w = box.offsetWidth, h = box.offsetHeight;
+  if (_camSkelEl.width !== w) _camSkelEl.width = w;
+  if (_camSkelEl.height !== h) _camSkelEl.height = h;
+  if (!_camSkelCtx) _camSkelCtx = _camSkelEl.getContext('2d');
+  const cx = _camSkelCtx;
+  cx.clearRect(0, 0, w, h);
+  if (!lm) return;
+
+  const pt = i => ({ x: (1 - lm[i].x) * w, y: lm[i].y * h });
+
+  cx.strokeStyle = 'rgba(255,79,163,0.80)';
+  cx.lineWidth = 1.8; cx.lineCap = 'round';
+  CONN.forEach(([a, b]) => {
+    const pa = pt(a), pb = pt(b);
+    cx.beginPath(); cx.moveTo(pa.x, pa.y); cx.lineTo(pb.x, pb.y); cx.stroke();
   });
-  lm.forEach((p,i) => {
-    lx.beginPath();
-    lx.arc((1-p.x)*W, p.y*H, TIPS.has(i)?2.5:1.2, 0, Math.PI*2);
-    lx.fillStyle = TIPS.has(i) ? 'rgba(255,79,163,0.6)' : 'rgba(255,255,255,0.18)';
-    lx.fill();
-  });
+  for (let i = 0; i < 21; i++) {
+    const p = pt(i);
+    cx.beginPath();
+    cx.arc(p.x, p.y, TIPS.has(i) ? 3.5 : 2, 0, Math.PI * 2);
+    cx.fillStyle = TIPS.has(i) ? 'rgba(255,79,163,0.95)' : 'rgba(255,255,255,0.85)';
+    cx.fill();
+  }
 }
 
 /* ═══════════════════════════════════════════
@@ -1035,7 +1052,7 @@ async function startCamera() {
   let stream;
   try {
     stream = await navigator.mediaDevices.getUserMedia({
-      video: { width:640, height:480, facingMode:'user' }
+      video: { width:480, height:360, facingMode:'user' }
     });
   } catch (_) {
     setStatus('Camera denied', false);
@@ -1053,8 +1070,8 @@ async function startCamera() {
     locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
   });
   hands.setOptions({
-    maxNumHands:1, modelComplexity:1,
-    minDetectionConfidence:0.70, minTrackingConfidence:0.50,
+    maxNumHands:1, modelComplexity:0,
+    minDetectionConfidence:0.65, minTrackingConfidence:0.50,
   });
   hands.onResults(res => {
     if (res.multiHandLandmarks?.length > 0) {
@@ -1081,6 +1098,7 @@ async function startCamera() {
       if (gesture !== 'thumbsup') setTarget(smoothedOpen);
 
       drawSkeleton(lm);
+      drawCamSkeleton(lm);
     } else {
       if (Date.now() - S.lastHand > 1800) {
         S.handOn = false; setTarget(0.12);
@@ -1088,6 +1106,7 @@ async function startCamera() {
         G.indexTip = null; G.palmPos = null;
       }
       drawSkeleton(null);
+      drawCamSkeleton(null);
     }
     refreshStatus();
   });
@@ -1099,18 +1118,20 @@ async function startCamera() {
   let smoothedOpen = 0.12;
   let prevExtN = 0;
   let ok=false;
+  let _mpTick = 0;
   try {
     if (typeof Camera !== 'undefined') {
       new Camera(vid, {
-        onFrame: async()=>hands.send({image:vid}),
-        width:640, height:480,
+        onFrame: async() => { _mpTick++; if (_mpTick % 2 === 0) await hands.send({image:vid}); },
+        width:480, height:360,
       }).start(); ok=true;
     }
   } catch(_){}
   if (!ok) {
-    (async function loop(){
-      if(vid.readyState>=2) await hands.send({image:vid});
-      requestAnimationFrame(loop);
+    (async function mpLoop(){
+      _mpTick++;
+      if(vid.readyState>=2 && _mpTick % 2 === 0) await hands.send({image:vid});
+      requestAnimationFrame(mpLoop);
     })();
   }
   return true;
@@ -1271,6 +1292,14 @@ document.addEventListener('mousemove', e => {
   }
 });
 
+/* touch → video scrub & mouse-mode bloom */
+document.addEventListener('touchstart', e => {
+  if (e.touches.length > 0) vidMouseX = e.touches[0].clientX / window.innerWidth;
+}, { passive: true });
+document.addEventListener('touchmove', e => {
+  if (e.touches.length > 0) vidMouseX = e.touches[0].clientX / window.innerWidth;
+}, { passive: true });
+
 function tickCursor() {
   cxC += (rawX-cxC) * 0.22;
   cyC += (rawY-cyC) * 0.22;
@@ -1306,8 +1335,11 @@ function cycleRenderer(idx) {
    MAIN LOOP
 ═══════════════════════════════════════════ */
 
-function loop() {
+function loop(now) {
   requestAnimationFrame(loop);
+  /* mobile fps cap */
+  if (FRAME_MS > 0 && now - _lastFrameT < FRAME_MS) return;
+  _lastFrameT = now;
   S.frame++;
 
   /* gesture: pinch → slow time, thumbsup → hold full bloom */
@@ -1320,8 +1352,8 @@ function loop() {
 
   /* color mode lerp */
   G.colorAngle += (COLOR_ANGLES[G.colorMode] - G.colorAngle) * 0.035;
-  cv.style.filter = Math.abs(G.colorAngle) > 0.5
-    ? `hue-rotate(${G.colorAngle.toFixed(1)}deg)` : '';
+  const _newFilter = Math.abs(G.colorAngle) > 0.5 ? `hue-rotate(${G.colorAngle.toFixed(1)}deg)` : '';
+  if (_newFilter !== _lastFilterStr) { cv.style.filter = _newFilter; _lastFilterStr = _newFilter; }
 
   /* parallax: palm position offsets flower center (smoothed) */
   if (G.palmPos && S.handOn) {
@@ -1367,10 +1399,18 @@ function loop() {
     updateVidBloomBar();
   }
 
-  renderers[activeRendererIdx].render(S.bloom);
+  /* render flower only when canvas is visible:
+     interact = transparent bg, end = 0.75 overlay (canvas shows through) */
+  const onInteract   = S.stage === 'interact';
+  const canvasVisible = onInteract || S.stage === 'end';
+  if (canvasVisible) {
+    renderers[activeRendererIdx].render(S.bloom);
+  } else if (S.stage !== 'video') {
+    ctx.fillStyle = '#050506';
+    ctx.fillRect(0, 0, cv.width, cv.height);
+  }
 
   /* petal particles */
-  const onInteract = S.stage === 'interact';
   if (onInteract) {
     const rate = Math.ceil(S.bloom * 3 + 0.4);
     if (S.frame % Math.max(1, 7-rate) === 0) {
@@ -1380,18 +1420,13 @@ function loop() {
     if (withering && S.frame % 4 === 0 && petals.length < MAX_P) {
       spawnPetals(2, false);
     }
-  } else if (S.stage === 'intro') {
-    if (S.frame % 150 === 0 && petals.length < 6) {
-      const p = new Petal(false);
-      p.maxA = 0.03 + Math.random()*0.04;
-      p.alpha = p.maxA * 0.4;
-      petals.push(p);
-    }
   }
 
-  petals = petals.filter(p=>p.active);
-  petals.sort((a,b)=>a.depth-b.depth);
-  petals.forEach(p => { p.update(S.bloom, withering); p.draw(); });
+  if (onInteract) {
+    petals = petals.filter(p=>p.active);
+    petals.sort((a,b)=>a.depth-b.depth);
+    petals.forEach(p => { p.update(S.bloom, withering); p.draw(); });
+  }
 
   updateBloomBar();
 
@@ -1403,7 +1438,7 @@ function loop() {
   if (gl && gl.textContent !== G.gestLabel) gl.textContent = G.gestLabel;
 
   /* lm-canvas: always on for spotlight, otherwise follow skeleton toggle */
-  lc.classList.toggle('on', (S.showSkel && S.tracking) || (G.gesture === 'point' && S.handOn));
+  lc.classList.toggle('on', G.gesture === 'point' && S.handOn);
 
   tickCursor();
 }
@@ -1430,9 +1465,8 @@ function bindButtons() {
   });
 
   document.getElementById('btn-skel').addEventListener('click', () => {
-    S.showSkel = !S.showSkel;
-    lc.classList.toggle('on', S.showSkel && S.tracking);
-    if (!S.showSkel) lx.clearRect(0,0,lc.width,lc.height);
+    const box = document.getElementById('cam-preview');
+    if (box) box.classList.toggle('hidden');
   });
 
   document.getElementById('btn-restart').addEventListener('click', () => {
@@ -1448,8 +1482,6 @@ function bindButtons() {
       btn.textContent = '● Camera Active';
       btn.classList.add('cam-on');
       setVideoStatus('Open your hand', true);
-      S.showSkel = true;
-      lc.classList.add('on');
     } else {
       btn.textContent = 'Allow Camera →';
       setVideoStatus('카메라 거부 · 마우스로 체험하세요', false);

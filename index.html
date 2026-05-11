@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=1920">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>BLOOM — Hand Interaction</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -111,6 +111,7 @@
   <!-- cam preview (bottom-left) -->
   <div id="cam-preview" class="cam-preview hidden">
     <video id="cam-vid" autoplay playsinline muted></video>
+    <canvas id="cam-skel"></canvas>
     <span>CAM</span>
   </div>
 
@@ -206,62 +207,62 @@
       <div class="gg-card">
         <div class="gg-sym">✋</div>
         <p class="gg-cname">Open Hand</p>
-        <p class="gg-cdesc">손가락을 모두 펼치면<br>꽃이 활짝 피어납니다</p>
+        <p class="gg-cdesc">손 펼침 정도에 비례해<br>꽃의 개화 정도가 결정됩니다</p>
         <span class="gg-ctag pink">BLOOM</span>
       </div>
 
       <div class="gg-card">
         <div class="gg-sym">✊</div>
         <p class="gg-cname">Closed Fist</p>
-        <p class="gg-cdesc">주먹을 꽉 쥐면<br>꽃이 천천히 시들어 집니다</p>
+        <p class="gg-cdesc">손을 쥘수록 꽃이<br>점점 시들어 집니다</p>
         <span class="gg-ctag dim">WITHER</span>
       </div>
 
       <div class="gg-card">
         <div class="gg-sym">✌</div>
         <p class="gg-cname">Peace Sign</p>
-        <p class="gg-cdesc">브이를 만들면 꽃잎 폭풍이<br>화면 전체를 가득 채웁니다</p>
+        <p class="gg-cdesc">브이를 만들면 꽃잎이<br>화면 가득 쏟아집니다</p>
         <span class="gg-ctag rose">PETAL STORM</span>
       </div>
 
       <div class="gg-card">
         <div class="gg-sym">☝</div>
         <p class="gg-cname">Pointing</p>
-        <p class="gg-cdesc">검지로 가리키면 빛의 광선이<br>손끝에서 꽃 중심으로 뻗습니다</p>
+        <p class="gg-cdesc">검지로 가리키면 손끝에서<br>꽃 중심으로 빛줄기가 뻗습니다</p>
         <span class="gg-ctag gold">SPOTLIGHT</span>
       </div>
 
       <div class="gg-card">
         <div class="gg-sym">🤘</div>
         <p class="gg-cname">Rock Sign</p>
-        <p class="gg-cdesc">록 사인을 만들 때마다<br>꽃의 색상 테마가 바뀝니다</p>
+        <p class="gg-cdesc">록 사인을 만들 때마다<br>꽃의 색상 테마가 순환합니다</p>
         <span class="gg-ctag purple">COLOR SHIFT × 4</span>
       </div>
 
       <div class="gg-card">
         <div class="gg-sym">🤏</div>
         <p class="gg-cname">Pinch</p>
-        <p class="gg-cdesc">엄지와 검지를 모으면<br>꽃의 시간이 느려집니다</p>
+        <p class="gg-cdesc">엄지와 검지를 모으면<br>꽃이 피고 지는 속도가 느려집니다</p>
         <span class="gg-ctag cyan">SLOW TIME</span>
       </div>
 
       <div class="gg-card">
         <div class="gg-sym">👍</div>
         <p class="gg-cname">Thumbs Up</p>
-        <p class="gg-cdesc">엄지를 세우면 꽃이<br>순식간에 만개합니다</p>
-        <span class="gg-ctag gold">INSTANT BLOOM</span>
+        <p class="gg-cdesc">엄지를 세우는 동안 꽃이<br>만개 상태를 유지하고 꽃잎이 쏟아집니다</p>
+        <span class="gg-ctag gold">FULL BLOOM HOLD</span>
       </div>
 
       <div class="gg-card">
         <div class="gg-sym">🖐</div>
         <p class="gg-cname">Hand Position</p>
-        <p class="gg-cdesc">손의 위치에 따라 꽃의<br>중심이 이동합니다</p>
+        <p class="gg-cdesc">손의 위치에 따라 꽃의<br>중심이 자연스럽게 이동합니다</p>
         <span class="gg-ctag pink">PARALLAX</span>
       </div>
 
     </div>
 
-    <p class="gg-note">손가락 개수 (1→4) = Peony · Lotus · Crystal · Dandelion 자동 선택</p>
+    <p class="gg-note">중립 자세에서 손가락 수 (1→4) = Peony · Lotus · Crystal · Dandelion 자동 선택</p>
   </div>
 </div>
 
