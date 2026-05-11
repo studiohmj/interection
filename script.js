@@ -44,7 +44,9 @@ const setCSS = () => {
   if (s !== _lastBloomCSS) { document.documentElement.style.setProperty('--bloom', s); _lastBloomCSS = s; }
 };
 
-const isMobile  = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+/* pointer:coarse = finger/touch primary input (not mouse). More reliable than
+   maxTouchPoints which is > 0 on Windows even without a touchscreen display. */
+const isMobile  = window.matchMedia('(pointer: coarse)').matches;
 const FRAME_MS  = isMobile ? 34 : 0;   // 30fps cap on mobile, uncapped on desktop
 let   _lastFrameT = 0;
 let   _lastFilterStr = '';
@@ -1511,7 +1513,7 @@ function loop(now) {
   /* lm-canvas: always on for spotlight, otherwise follow skeleton toggle */
   lc.classList.toggle('on', G.gesture === 'point' && S.handOn);
 
-  if (!isMobile) tickCursor();
+  tickCursor();
 }
 
 /* ═══════════════════════════════════════════
