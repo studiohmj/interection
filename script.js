@@ -59,6 +59,7 @@ const lx  = lc.getContext('2d');
 const flowerVid = document.getElementById('flower-vid');
 let vidMouseX    = 0;
 let _lastVidBloom = -1;   // throttle video seek
+let _lastSeekT    = 0;    // time-gate: max ~10 seeks/s
 
 function resizeCanvases() {
   cv.width  = lc.width  = window.innerWidth;
@@ -1171,18 +1172,22 @@ async function startCamera() {
   let _mpTick = 0;
   try {
     if (typeof Camera !== 'undefined') {
-      const _mpSkipN = isMobile ? 3 : 2;
       new Camera(vid, {
-        onFrame: async() => { _mpTick++; if (_mpTick % _mpSkipN === 0) await hands.send({image:vid}); },
+        onFrame: async() => {
+          _mpTick++;
+          /* interact: full rate · other stages: half rate to reduce main-thread pressure */
+          const _skip = S.stage === 'interact' ? (isMobile ? 3 : 2) : (isMobile ? 6 : 4);
+          if (_mpTick % _skip === 0) await hands.send({image:vid});
+        },
         width:480, height:360,
       }).start(); ok=true;
     }
   } catch(_){}
   if (!ok) {
-    const _mpSkipN = isMobile ? 3 : 2;
     (async function mpLoop(){
       _mpTick++;
-      if(vid.readyState>=2 && _mpTick % _mpSkipN === 0) await hands.send({image:vid});
+      const _skip = S.stage === 'interact' ? (isMobile ? 3 : 2) : (isMobile ? 6 : 4);
+      if(vid.readyState>=2 && _mpTick % _skip === 0) await hands.send({image:vid});
       requestAnimationFrame(mpLoop);
     })();
   }
@@ -1456,11 +1461,13 @@ function loop(now) {
 
   /* scrub flower video — only when bloom changes enough (avoids per-frame seek) */
   if (S.stage === 'video' && flowerVid.readyState >= 1 && flowerVid.duration) {
-    if (Math.abs(S.bloom - _lastVidBloom) > 0.012) {
-      /* clamp to avoid hitting exact end (which can trigger ended event even with loop) */
+    /* seek only when bloom changed enough AND enough time passed (max ~10 seeks/s) */
+    const _seekThresh = isMobile ? 0.045 : 0.018;
+    if (Math.abs(S.bloom - _lastVidBloom) > _seekThresh && now - _lastSeekT > 100) {
       const t = Math.min(S.bloom * flowerVid.duration, flowerVid.duration - 0.05);
       flowerVid.currentTime = Math.max(0, t);
       _lastVidBloom = S.bloom;
+      _lastSeekT = now;
     }
     updateVidBloomBar();
   }
@@ -1578,6 +1585,23 @@ function bindButtons() {
   });
   document.getElementById('btn-gg-back').addEventListener('mouseenter', () => document.body.classList.add('hovering'));
   document.getElementById('btn-gg-back').addEventListener('mouseleave', () => document.body.classList.remove('hovering'));
+
+  /* guide tab switcher */
+  const GG_SUBTITLES = {
+    cam:   '손 모양에 따라 다른 인터렉션이 활성화됩니다<br>카메라 모드에서만 작동합니다',
+    mouse: '마우스 클릭과 위치로 꽃을 제어합니다<br>터치 기기에서도 동일하게 작동합니다',
+  };
+  document.querySelectorAll('.gg-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      const panel = tab.dataset.panel;
+      document.querySelectorAll('.gg-tab').forEach(t => t.classList.toggle('gg-tab-active', t === tab));
+      document.querySelectorAll('.gg-panel').forEach(p => p.classList.toggle('gg-panel-off', p.id !== 'gg-panel-' + panel));
+      const sub = document.getElementById('gg-subtitle');
+      if (sub) sub.innerHTML = GG_SUBTITLES[panel] || '';
+    });
+    tab.addEventListener('mouseenter', () => document.body.classList.add('hovering'));
+    tab.addEventListener('mouseleave', () => document.body.classList.remove('hovering'));
+  });
 
   document.getElementById('mode-cam').addEventListener('click', async () => {
     if (S.mode !== 'camera') { const ok=await startCamera(); if(!ok) enableMouse(); }

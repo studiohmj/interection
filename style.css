@@ -147,43 +147,56 @@ button { font-family:inherit; cursor:none; background:none; border:none; }
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
+  gap: 20px;
 }
 
-.btn-vid-cam {
+/* PRIMARY: enter the experience */
+.btn-vid-canvas {
   display: inline-flex;
   align-items: center;
-  border: 1px solid rgba(236,234,227,0.28);
+  border: 1px solid rgba(255,79,163,0.45);
+  background: rgba(255,79,163,0.07);
   color: var(--fg);
   font-size: 13px;
   font-weight: 500;
   letter-spacing: 5px;
   text-transform: uppercase;
-  padding: 20px 48px;
+  padding: 20px 52px;
   transition: border-color 0.3s, color 0.3s, background 0.3s, box-shadow 0.3s;
 }
-.btn-vid-cam:hover {
+.btn-vid-canvas:hover {
   border-color: var(--pink);
   color: var(--pink);
-  background: rgba(255,79,163,0.06);
-  box-shadow: 0 0 28px rgba(255,79,163,0.1);
-}
-.btn-vid-cam.cam-on {
-  border-color: rgba(255,79,163,0.5);
-  color: rgba(255,79,163,0.85);
-  pointer-events: none;
-  letter-spacing: 4px;
+  background: rgba(255,79,163,0.13);
+  box-shadow: 0 0 38px rgba(255,79,163,0.15);
 }
 
-.btn-vid-canvas {
+/* SECONDARY row: camera + guide */
+.vid-acts-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.vid-acts-sep {
+  font-size: 10px;
+  color: rgba(236,234,227,0.18);
+}
+
+/* SECONDARY: allow camera */
+.btn-vid-cam {
   font-size: 11px;
   font-weight: 300;
-  letter-spacing: 4px;
+  letter-spacing: 3px;
   text-transform: uppercase;
-  color: rgba(236,234,227,0.5);
+  color: rgba(236,234,227,0.45);
   transition: color 0.3s;
 }
-.btn-vid-canvas:hover { color: var(--fg); }
+.btn-vid-cam:hover { color: var(--fg); }
+.btn-vid-cam.cam-on {
+  color: rgba(255,79,163,0.7);
+  pointer-events: none;
+  letter-spacing: 3px;
+}
 
 /* video bloom bar — left */
 .vb-wrap {
@@ -706,14 +719,14 @@ body.hovering #cursor {
 .hold-indicator.on { opacity: 1; }
 
 /* ═══════════════════════════════════
-   VIDEO STAGE EXTRA BUTTONS
+   VIDEO STAGE — GUIDE BUTTON (tertiary)
 ═══════════════════════════════════ */
 .btn-vid-guide {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 300;
   letter-spacing: 3px;
   text-transform: uppercase;
-  color: rgba(236,234,227,0.35);
+  color: rgba(236,234,227,0.4);
   transition: color 0.3s;
 }
 .btn-vid-guide:hover { color: rgba(255,79,163,0.7); }
@@ -843,12 +856,53 @@ body.hovering #cursor {
   letter-spacing: 0.5px;
 }
 
+/* Tab switcher */
+.gg-tabs {
+  display: flex;
+  align-items: flex-end;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 48px;
+}
+.gg-tab {
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: rgba(236,234,227,0.32);
+  padding: 13px 32px;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color 0.22s, border-color 0.22s;
+}
+.gg-tab:hover { color: rgba(236,234,227,0.65); }
+.gg-tab-active {
+  color: var(--pink);
+  border-bottom-color: var(--pink);
+}
+
+/* Panel visibility */
+.gg-panel-off { display: none; }
+
 .gg-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 1px;
   margin-bottom: 52px;
   background: rgba(236,234,227,0.06);
+}
+
+/* Mouse guide: 4 cards → 4-col single row */
+.gg-grid-mouse {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+/* Large text symbols (mouse guide) — styled differently from emoji */
+.gg-sym-icon {
+  font-size: 42px;
+  line-height: 1;
+  margin-bottom: 8px;
+  color: rgba(236,234,227,0.55);
+  letter-spacing: -1px;
 }
 
 .gg-card {
@@ -948,7 +1002,8 @@ body.hovering #cursor {
   .vid-ko    { font-size: 14px; }
   .vid-en    { font-size: 10px; letter-spacing: 2px; }
   .vid-status{ font-size: 10px; letter-spacing: 2px; }
-  .btn-vid-cam { padding: 14px 28px; font-size: 12px; letter-spacing: 3px; }
+  .btn-vid-canvas { padding: 15px 28px; font-size: 12px; letter-spacing: 3px; }
+  .vid-acts-row { gap: 12px; }
   .vb-wrap   { left: 14px; }
   .vb-track  { height: 100px; }
 
@@ -987,10 +1042,13 @@ body.hovering #cursor {
 
   /* ── GESTURE GUIDE ── */
   .gg-page    { padding: 28px 16px 52px; }
-  .gg-header  { margin-bottom: 36px; gap: 20px; }
+  .gg-header  { margin-bottom: 28px; gap: 20px; }
   .gg-title   { font-size: clamp(26px, 8vw, 48px); }
   .gg-subtitle{ font-size: 12px; }
+  .gg-tabs    { margin-bottom: 28px; }
+  .gg-tab     { font-size: 10px; letter-spacing: 2px; padding: 10px 16px; }
   .gg-grid    { grid-template-columns: repeat(2, 1fr); }
+  .gg-grid-mouse { grid-template-columns: repeat(2, 1fr); }
   .gg-card    { padding: 24px 16px 20px; gap: 7px; }
   .gg-sym     { font-size: 32px; margin-bottom: 2px; }
   .gg-cname   { font-size: 10px; letter-spacing: 2px; }
