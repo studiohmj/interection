@@ -57,7 +57,8 @@ const ctx = cv.getContext('2d');
 const lc  = document.getElementById('lm-canvas');
 const lx  = lc.getContext('2d');
 const flowerVid = document.getElementById('flower-vid');
-let vidMouseX = 0;
+let vidMouseX    = 0;
+let _lastVidBloom = -1;   // throttle video seek
 
 function resizeCanvases() {
   cv.width  = lc.width  = window.innerWidth;
@@ -946,15 +947,17 @@ function drawSkeleton(lm) {
 }
 
 /* draw hand skeleton(s) on cam-preview canvas */
-let _camSkelEl = null, _camSkelCtx = null;
+let _camSkelEl = null, _camSkelCtx = null, _camSkelW = 0, _camSkelH = 0;
 function drawCamSkeleton(lmArray) {
-  if (!_camSkelEl) _camSkelEl = document.getElementById('cam-skel');
-  if (!_camSkelEl) return;
-  const box = _camSkelEl.parentElement;
-  const w = box.offsetWidth, h = box.offsetHeight;
-  if (_camSkelEl.width !== w) _camSkelEl.width = w;
-  if (_camSkelEl.height !== h) _camSkelEl.height = h;
-  if (!_camSkelCtx) _camSkelCtx = _camSkelEl.getContext('2d');
+  if (!_camSkelEl) {
+    _camSkelEl = document.getElementById('cam-skel');
+    if (!_camSkelEl) return;
+    _camSkelCtx = _camSkelEl.getContext('2d');
+    const box = _camSkelEl.parentElement;
+    _camSkelW = box.offsetWidth; _camSkelH = box.offsetHeight;
+    _camSkelEl.width = _camSkelW; _camSkelEl.height = _camSkelH;
+  }
+  const w = _camSkelW, h = _camSkelH;
   const cx = _camSkelCtx;
   cx.clearRect(0, 0, w, h);
   if (!lmArray.length) return;
@@ -1014,7 +1017,7 @@ const GESTURE_LABELS = {
   point:    'Pointing — Spotlight',
   rock:     'Rock 🤘 — Color Shift',
   pinch:    'Pinch — Slow Time',
-  thumbsup: 'Thumbs Up — Instant Bloom',
+  thumbsup: 'Thumbs Up — Full Bloom Hold',
   neutral:  '',
 };
 const COLOR_ANGLES = [0, 200, 285, 48]; // pink, teal, purple, gold
@@ -1168,16 +1171,18 @@ async function startCamera() {
   let _mpTick = 0;
   try {
     if (typeof Camera !== 'undefined') {
+      const _mpSkipN = isMobile ? 3 : 2;
       new Camera(vid, {
-        onFrame: async() => { _mpTick++; if (_mpTick % 2 === 0) await hands.send({image:vid}); },
+        onFrame: async() => { _mpTick++; if (_mpTick % _mpSkipN === 0) await hands.send({image:vid}); },
         width:480, height:360,
       }).start(); ok=true;
     }
   } catch(_){}
   if (!ok) {
+    const _mpSkipN = isMobile ? 3 : 2;
     (async function mpLoop(){
       _mpTick++;
-      if(vid.readyState>=2 && _mpTick % 2 === 0) await hands.send({image:vid});
+      if(vid.readyState>=2 && _mpTick % _mpSkipN === 0) await hands.send({image:vid});
       requestAnimationFrame(mpLoop);
     })();
   }
@@ -1234,7 +1239,7 @@ function showHoldIndicator(on) {
 function updateModeUI(mode) {
   document.getElementById('mode-cam').classList.toggle('active-mode', mode==='camera');
   document.getElementById('mode-mouse').classList.toggle('active-mode', mode==='mouse');
-  const guide = document.getElementById('guide-ko');
+  const guide = document.querySelector('.guide-ko');
   if (guide) {
     if (mode === 'mouse') {
       guide.innerHTML = '꾹 누르면 꽃이 지고<br>손을 떼면 꽃이 핍니다.';
@@ -1274,13 +1279,12 @@ function refreshStatus() {
    BLOOM PROGRESS BAR
 ═══════════════════════════════════════════ */
 function updateBloomBar() {
-  const fill = document.getElementById('bloom-bar-fill');
-  if (fill) fill.style.height = (S.bloom * 100).toFixed(1) + '%';
+  if (_elBloomFill && S.stage === 'interact')
+    _elBloomFill.style.height = (S.bloom * 100).toFixed(1) + '%';
 }
 
 function updateVidBloomBar() {
-  const fill = document.getElementById('vb-fill');
-  if (fill) fill.style.height = (S.bloom * 100).toFixed(1) + '%';
+  if (_elVbFill) _elVbFill.style.height = (S.bloom * 100).toFixed(1) + '%';
 }
 
 function setVideoStatus(msg, on) {
@@ -1307,8 +1311,17 @@ function goTo(name) {
   S.stage = name;
   Object.entries(stages).forEach(([k,el]) => el.classList.toggle('active', k===name));
   flowerVid.classList.toggle('visible', name === 'video');
-  if (name === 'video') flowerVid.pause();
-  /* reset color/gesture effects when leaving interact */
+
+  if (name === 'video') {
+    /* play at rate=0: keeps video buffer alive in browser memory
+       without rate=0, mobile browsers release buffer after ~30s of pause */
+    flowerVid.play().catch(() => {});
+    flowerVid.playbackRate = 0;
+  } else if (S.prevStage === 'video') {
+    flowerVid.pause();
+    flowerVid.playbackRate = 1;
+  }
+
   if (S.prevStage === 'interact' && name !== 'interact') {
     G.colorMode = 0; G.colorAngle = 0; cv.style.filter = '';
   }
@@ -1397,20 +1410,21 @@ function loop(now) {
   }
   if (G.gesture === 'thumbsup') setTarget(1);
 
-  /* color mode lerp */
-  G.colorAngle += (COLOR_ANGLES[G.colorMode] - G.colorAngle) * 0.035;
-  const _newFilter = Math.abs(G.colorAngle) > 0.5 ? `hue-rotate(${G.colorAngle.toFixed(1)}deg)` : '';
-  if (_newFilter !== _lastFilterStr) { cv.style.filter = _newFilter; _lastFilterStr = _newFilter; }
+  /* color / parallax only needed in interact stage */
+  if (S.stage === 'interact') {
+    G.colorAngle += (COLOR_ANGLES[G.colorMode] - G.colorAngle) * 0.035;
+    const _newFilter = Math.abs(G.colorAngle) > 0.5 ? `hue-rotate(${G.colorAngle.toFixed(1)}deg)` : '';
+    if (_newFilter !== _lastFilterStr) { cv.style.filter = _newFilter; _lastFilterStr = _newFilter; }
 
-  /* parallax: palm position offsets flower center (smoothed) */
-  if (G.palmPos && S.handOn) {
-    const tx = ((0.5 - G.palmPos.x)) * cv.width  * 0.10;
-    const ty = ((G.palmPos.y - 0.5)) * cv.height * 0.10;
-    G.parallaxX += (tx - G.parallaxX) * 0.06;
-    G.parallaxY += (ty - G.parallaxY) * 0.06;
-  } else {
-    G.parallaxX *= 0.92;
-    G.parallaxY *= 0.92;
+    if (G.palmPos && S.handOn) {
+      const tx = ((0.5 - G.palmPos.x)) * cv.width  * 0.10;
+      const ty = ((G.palmPos.y - 0.5)) * cv.height * 0.10;
+      G.parallaxX += (tx - G.parallaxX) * 0.06;
+      G.parallaxY += (ty - G.parallaxY) * 0.06;
+    } else {
+      G.parallaxX *= 0.92;
+      G.parallaxY *= 0.92;
+    }
   }
 
   /* directional lerp: faster wither than bloom, scaled by timeScale */
@@ -1440,9 +1454,14 @@ function loop(now) {
   S.prevBloom = S.bloom;
   setCSS();
 
-  /* scrub flower video in video stage */
-  if (S.stage === 'video' && flowerVid && flowerVid.readyState >= 1 && flowerVid.duration) {
-    flowerVid.currentTime = S.bloom * flowerVid.duration;
+  /* scrub flower video — only when bloom changes enough (avoids per-frame seek) */
+  if (S.stage === 'video' && flowerVid.readyState >= 1 && flowerVid.duration) {
+    if (Math.abs(S.bloom - _lastVidBloom) > 0.012) {
+      /* clamp to avoid hitting exact end (which can trigger ended event even with loop) */
+      const t = Math.min(S.bloom * flowerVid.duration, flowerVid.duration - 0.05);
+      flowerVid.currentTime = Math.max(0, t);
+      _lastVidBloom = S.bloom;
+    }
     updateVidBloomBar();
   }
 
@@ -1478,16 +1497,14 @@ function loop(now) {
   updateBloomBar();
 
   /* gesture indicator visibility */
-  const gi = document.getElementById('gest-indicator');
-  const gl = document.getElementById('gest-label');
   const showGI = !!G.gestLabel && S.handOn && S.stage === 'interact';
-  if (gi) gi.classList.toggle('on', showGI);
-  if (gl && gl.textContent !== G.gestLabel) gl.textContent = G.gestLabel;
+  if (_elGI) _elGI.classList.toggle('on', showGI);
+  if (_elGL && _elGL.textContent !== G.gestLabel) _elGL.textContent = G.gestLabel;
 
   /* lm-canvas: always on for spotlight, otherwise follow skeleton toggle */
   lc.classList.toggle('on', G.gesture === 'point' && S.handOn);
 
-  tickCursor();
+  if (!isMobile) tickCursor();
 }
 
 /* ═══════════════════════════════════════════
@@ -1590,9 +1607,16 @@ function setLoad(pct, msg) {
   if (msg && ldMsg) ldMsg.textContent = msg;
 }
 
+/* cached DOM refs for hot loop */
+let _elGI, _elGL, _elBloomFill, _elVbFill;
+
 window.addEventListener('load', () => {
   setLoad(50, 'Building');
   bindButtons();
+  _elGI       = document.getElementById('gest-indicator');
+  _elGL       = document.getElementById('gest-label');
+  _elBloomFill= document.getElementById('bloom-bar-fill');
+  _elVbFill   = document.getElementById('vb-fill');
   goTo('video');
   setLoad(100, 'Ready');
 
