@@ -1165,34 +1165,27 @@ async function startCamera() {
   });
 
   S.tracking=true; S.mode='camera';
-  setStatus('Tracking hand', true);
   updateModeUI('camera');
+  setStatus('Hand tracking active', true);
 
   let smoothedOpen = 0.12;
   let prevExtN = 0;
-  let ok=false;
-  let _mpTick = 0;
-  try {
-    if (typeof Camera !== 'undefined') {
-      new Camera(vid, {
-        onFrame: async() => {
-          _mpTick++;
-          /* interact: full rate · other stages: half rate to reduce main-thread pressure */
-          const _skip = S.stage === 'interact' ? (isMobile ? 3 : 2) : (isMobile ? 6 : 4);
-          if (_mpTick % _skip === 0) await hands.send({image:vid});
-        },
-        width:480, height:360,
-      }).start(); ok=true;
+  let _lastMpT = 0;
+  let _mpBusy  = false;
+  /* 시간 기반 스로틀: mobile ~12fps, desktop ~16fps */
+  const MP_MS = isMobile ? 80 : 60;
+
+  (async function mpLoop() {
+    const now = performance.now();
+    if (!_mpBusy && vid.readyState >= 2 && now - _lastMpT >= MP_MS) {
+      _lastMpT = now;
+      _mpBusy  = true;
+      try { await hands.send({ image: vid }); } catch (_) {}
+      _mpBusy  = false;
     }
-  } catch(_){}
-  if (!ok) {
-    (async function mpLoop(){
-      _mpTick++;
-      const _skip = S.stage === 'interact' ? (isMobile ? 3 : 2) : (isMobile ? 6 : 4);
-      if(vid.readyState>=2 && _mpTick % _skip === 0) await hands.send({image:vid});
-      requestAnimationFrame(mpLoop);
-    })();
-  }
+    requestAnimationFrame(mpLoop);
+  })();
+
   return true;
 }
 
@@ -1438,8 +1431,7 @@ function loop(now) {
   const speed  = (S.target < S.bloom ? 0.065 : 0.038) * G.timeScale;
   S.bloom     += (S.target - S.bloom) * speed;
 
-  /* video stage: mouse X scrub (when no camera) */
-  if (S.stage === 'video' && S.mode !== 'camera') setTarget(vidMouseX);
+  /* video stage: mouse scrub disabled — camera only */
 
   /* hand timeout → ambient */
   if (S.tracking && S.handOn && Date.now()-S.lastHand > 2000) {
