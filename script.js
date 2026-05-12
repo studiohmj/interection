@@ -47,7 +47,7 @@ const setCSS = () => {
 /* pointer:coarse = finger/touch primary input (not mouse). More reliable than
    maxTouchPoints which is > 0 on Windows even without a touchscreen display. */
 const isMobile  = window.matchMedia('(pointer: coarse)').matches;
-const FRAME_MS  = isMobile ? 34 : 0;   // 30fps cap on mobile, uncapped on desktop
+const FRAME_MS  = isMobile ? 34 : 16;  // 30fps mobile, 60fps desktop
 let   _lastFrameT = 0;
 let   _lastFilterStr = '';
 
@@ -83,13 +83,6 @@ class FlowerRenderer {
 
   /* ── build petal data ── */
   _buildPetals() {
-    /*  li = layer index (0=outermost, drawn first)
-        r  = max radius from center
-        len= petal length
-        w  = half-width ratio relative to len
-        hb = base hue  hv = hue variance
-        Lb = base lightness (saturated mid)
-        Ld = delta to tip lightness               */
     const cfg = [
       { li:0, n:9,  r:230, len:100, w:.38, hb:334, hv:8,  Lb:46, Ld:36 },
       { li:1, n:7,  r:148, len:76,  w:.43, hb:338, hv:6,  Lb:51, Ld:30 },
@@ -106,11 +99,12 @@ class FlowerRenderer {
           Lbase:  Lb + (Math.random() - 0.5) * 5,
           Ltip:   Lb + Ld + (Math.random() - 0.5) * 6,
           ph:     Math.random() * Math.PI * 2,
-          dropPh: Math.random() * Math.PI * 2,  // for wither droop phase
+          dropPh: Math.random() * Math.PI * 2,
         });
       }
     });
-    return petals;
+    /* pre-sort outer→inner so render() doesn't sort every frame */
+    return petals.sort((a, b) => a.li - b.li);
   }
 
   /* ── precompute stamen filaments ── */
@@ -162,10 +156,8 @@ class FlowerRenderer {
       ctx.fillRect(0, 0, W, H);
     }
 
-    /* ── petals outer → inner ── */
-    [...this.petals]
-      .sort((a, b) => a.li - b.li)
-      .forEach(p => this._petal(p, bloom, cx, cy));
+    /* ── petals outer → inner (pre-sorted in constructor) ── */
+    this.petals.forEach(p => this._petal(p, bloom, cx, cy));
 
     /* ── stamen ── */
     this._stamen(bloom, cx, cy);
@@ -208,19 +200,11 @@ class FlowerRenderer {
     ctx.scale(scale, scale);
     ctx.globalAlpha = 0.04 + b * 0.96;
 
-    /* gradient: dark rich base → bright mid → pale luminous tip */
+    /* gradient: 3-stop (5-stop was too heavy per frame) */
     const gr = ctx.createLinearGradient(0, -len * 0.18, 0, len);
-    gr.addColorStop(0,    `hsl(${p.hue+10},${sat*.55}%,${Lmid-18}%)`);
-    gr.addColorStop(0.18, `hsl(${p.hue+4}, ${sat*.8}%, ${Lmid-6}%)`);
-    gr.addColorStop(0.45, `hsl(${p.hue},   ${sat}%,    ${Lmid}%)`);
-    gr.addColorStop(0.72, `hsl(${p.hue-4}, ${sat*.85}%,${(Lmid+Ltip)/2}%)`);
-    gr.addColorStop(1,    `hsl(${p.hue-8}, ${sat*.4}%, ${Ltip}%)`);
-
-    /* petal glow */
-    if (b > 0.18) {
-      ctx.shadowColor = `hsl(${p.hue},82%,65%)`;
-      ctx.shadowBlur  = 5 + b * 12;
-    }
+    gr.addColorStop(0,   `hsl(${p.hue+7}, ${sat*.6}%, ${Lmid-14}%)`);
+    gr.addColorStop(0.5, `hsl(${p.hue},   ${sat}%,    ${Lmid}%)`);
+    gr.addColorStop(1,   `hsl(${p.hue-7}, ${sat*.5}%, ${Ltip}%)`);
 
     ctx.fillStyle = gr;
 
@@ -342,7 +326,7 @@ class LotusRenderer {
         });
       }
     });
-    return out;
+    return out.sort((a,b)=>a.li-b.li);
   }
 
   _lb(p, bloom) {
@@ -374,7 +358,7 @@ class LotusRenderer {
       ctx.fillRect(0, 0, W, H);
     }
 
-    [...this.petals].sort((a,b)=>a.li-b.li).forEach(p=>this._petal(p, bloom, cx, cy));
+    this.petals.forEach(p=>this._petal(p, bloom, cx, cy));
     this._center(bloom, cx, cy);
 
     const v = ctx.createRadialGradient(cx, cy, W*0.2, cx, cy, W*0.74);
@@ -406,15 +390,10 @@ class LotusRenderer {
     ctx.globalAlpha = 0.06 + b*0.92;
 
     const gr = ctx.createLinearGradient(0,-len*0.15, 0, len);
-    gr.addColorStop(0,    `hsl(${p.hue+12},${sat*0.3}%,96%)`);
-    gr.addColorStop(0.25, `hsl(${p.hue+6}, ${sat*0.6}%,${p.Ltip+2}%)`);
-    gr.addColorStop(0.55, `hsl(${p.hue},   ${sat}%,   ${p.Lbase}%)`);
-    gr.addColorStop(1,    `hsl(${p.hue-4}, ${sat*1.1}%,${p.Lbase-12}%)`);
+    gr.addColorStop(0,   `hsl(${p.hue+8}, ${sat*0.4}%, 94%)`);
+    gr.addColorStop(0.5, `hsl(${p.hue},   ${sat}%,   ${p.Lbase}%)`);
+    gr.addColorStop(1,   `hsl(${p.hue-4}, ${sat*1.0}%,${p.Lbase-10}%)`);
 
-    if (b > 0.15) {
-      ctx.shadowColor = `hsl(${p.hue},${sat*2}%,90%)`;
-      ctx.shadowBlur  = 10 + b*20;
-    }
     ctx.fillStyle = gr;
 
     ctx.beginPath();
@@ -502,7 +481,7 @@ class CrystalRenderer {
         });
       }
     });
-    return out;
+    return out.sort((a,b)=>a.li-b.li);
   }
 
   _lb(f, bloom) {
@@ -548,7 +527,7 @@ class CrystalRenderer {
       ctx.restore();
     }
 
-    [...this.facets].sort((a,b)=>a.li-b.li).forEach(f=>this._facet(f, bloom, cx, cy));
+    this.facets.forEach(f=>this._facet(f, bloom, cx, cy));
     this._core(bloom, cx, cy);
 
     const v = ctx.createRadialGradient(cx, cy, W*0.19, cx, cy, W*0.72);
@@ -575,14 +554,11 @@ class CrystalRenderer {
     ctx.translate(px, py);
     ctx.rotate(f.angle + f.rotOff + this.t*0.0035);
     ctx.globalAlpha = 0.07 + b*0.87;
-    ctx.shadowColor = `hsl(${hue},${sat}%,${L+30}%)`;
-    ctx.shadowBlur  = 14 + b*28;
 
     const gr = ctx.createLinearGradient(-sz, 0, sz, sz*1.2);
-    gr.addColorStop(0,    `hsl(${hue+25},${sat}%,${L+30}%)`);
-    gr.addColorStop(0.3,  `hsl(${hue+10},${sat}%,${L+15}%)`);
-    gr.addColorStop(0.65, `hsl(${hue},   ${sat}%,${L}%)`);
-    gr.addColorStop(1,    `hsl(${hue-20},${sat*.75}%,${L-12}%)`);
+    gr.addColorStop(0,   `hsl(${hue+18},${sat}%,${L+28}%)`);
+    gr.addColorStop(0.5, `hsl(${hue},   ${sat}%,${L}%)`);
+    gr.addColorStop(1,   `hsl(${hue-18},${sat*.75}%,${L-10}%)`);
     ctx.fillStyle = gr;
 
     ctx.beginPath();
@@ -683,7 +659,8 @@ class DandelionRenderer {
         ph:  Math.random()*Math.PI*2,
       });
     }
-    return out;
+    /* pre-sort back→front by z3d (positive curR keeps order stable) */
+    return out.sort((a,b) => a.z3d - b.z3d);
   }
 
   render(bloom) {
@@ -711,11 +688,8 @@ class DandelionRenderer {
     }
 
     const curR = 8 + bloom*(175-8);
-    const sorted = [...this.seeds]
-      .map(s => ({ ...s, _rz: s.z3d*curR }))
-      .sort((a,b) => a._rz - b._rz);
-
-    sorted.forEach(s => this._seed(s, bloom, cx, cy, curR));
+    /* use pre-sorted seeds (no spread/sort every frame) */
+    this.seeds.forEach(s => this._seed(s, bloom, cx, cy, curR));
     this._center(bloom, cx, cy);
 
     const v = ctx.createRadialGradient(cx, cy, W*0.18, cx, cy, W*0.7);
@@ -745,27 +719,23 @@ class DandelionRenderer {
     /* filament from center to tip */
     ctx.strokeStyle = `hsl(${s.hue},55%,72%)`;
     ctx.lineWidth   = 0.55*sc;
-    ctx.shadowColor = `hsl(${s.hue},75%,82%)`;
-    ctx.shadowBlur  = 5*sc;
     ctx.beginPath();
     ctx.moveTo(cx, cy);
     ctx.lineTo(px, py);
     ctx.stroke();
 
-    /* starburst tip */
+    /* starburst tip — 6 rays (was 10, too heavy × 48 seeds) */
     ctx.translate(px, py);
     ctx.strokeStyle = `hsl(${s.hue},65%,80%)`;
     ctx.lineWidth   = 0.4*sc;
-    ctx.shadowBlur  = 3*sc;
-    for (let i=0; i<10; i++) {
-      const ang = (i/10)*Math.PI*2;
+    for (let i=0; i<6; i++) {
+      const ang = (i/6)*Math.PI*2;
       const rl  = i%2===0 ? sz : sz*0.55;
       ctx.beginPath();
       ctx.moveTo(0,0);
       ctx.lineTo(Math.cos(ang)*rl, Math.sin(ang)*rl);
       ctx.stroke();
     }
-    ctx.shadowBlur = 8*sc;
     ctx.fillStyle  = `hsl(${s.hue},70%,82%)`;
     ctx.beginPath();
     ctx.arc(0, 0, sz*0.28, 0, Math.PI*2);
@@ -800,7 +770,7 @@ const PCLR = [
   '#FF4FA3','#FF74B8','#FB8EC4','#F9A8D4',
   '#FECDD3','#EC4899','#E879A0','#FF6BB5',
 ];
-const MAX_P = isMobile ? 80 : 150;
+const MAX_P = isMobile ? 60 : 100;
 let petals = [];
 
 class Petal {
@@ -1034,8 +1004,19 @@ function detectGesture(lm) {
 
   const thumbTip = lm[4], thumbIP = lm[3];
 
-  /* thumbsup: thumb clearly pointing up, ALL other fingers closed (no stray) */
-  const thumbUp = thumbTip.y < thumbIP.y - 0.04 && extN === 0;
+  /* thumbsup: thumb genuinely pointing UP — 수직 각도 체크로 주먹 오인 방지
+     - thumbVertical: 엄지 방향 벡터의 수직 성분 (1.0 = 완전 위쪽)
+     - 0.75 이상이어야 인정 (약 41° 이내 수직 정렬 필요) */
+  const thumbDY  = lm[2].y - thumbTip.y;  /* 양수 = 위로 향함 */
+  const thumbDX  = thumbTip.x - lm[2].x;
+  const thumbLen = Math.hypot(thumbDX, thumbDY) + 1e-6;
+  const thumbVertical = thumbDY / thumbLen;  /* 수직 성분 */
+
+  const thumbUp = thumbTip.y < thumbIP.y - 0.06
+               && thumbTip.y < lm[0].y  - 0.06    /* 손목보다 충분히 위 (강화) */
+               && thumbTip.y < lm[9].y  - 0.04    /* 손바닥 중심보다 위 (마진 추가) */
+               && thumbVertical > 0.75             /* 수직 방향으로만 인정 */
+               && extN === 0;
 
   /* pinch: thumb-index distance < threshold AND index finger raised above MCP
      (prevents fist from triggering pinch when thumb is near folded index) */
@@ -1122,7 +1103,7 @@ async function startCamera() {
         avgPalm  = { x: (palm0.x + palm1.x) / 2, y: (palm0.y + palm1.y) / 2 };
       }
 
-      smoothedOpen += (avgRatio - smoothedOpen) * 0.42;
+      smoothedOpen += (avgRatio - smoothedOpen) * 0.55;
 
       G.prevGesture = G.gesture;
       G.gesture     = gesture;
@@ -1172,8 +1153,8 @@ async function startCamera() {
   let prevExtN = 0;
   let _lastMpT = 0;
   let _mpBusy  = false;
-  /* 시간 기반 스로틀: mobile ~12fps, desktop ~16fps */
-  const MP_MS = isMobile ? 80 : 60;
+  /* 시간 기반 스로틀: mobile ~15fps, desktop ~20fps */
+  const MP_MS = isMobile ? 66 : 50;
 
   (async function mpLoop() {
     const now = performance.now();
@@ -1428,7 +1409,7 @@ function loop(now) {
   }
 
   /* directional lerp: faster wither than bloom, scaled by timeScale */
-  const speed  = (S.target < S.bloom ? 0.065 : 0.038) * G.timeScale;
+  const speed  = (S.target < S.bloom ? 0.09 : 0.055) * G.timeScale;
   S.bloom     += (S.target - S.bloom) * speed;
 
   /* video stage: mouse scrub disabled — camera only */
@@ -1491,7 +1472,8 @@ function loop(now) {
 
   if (onInteract) {
     petals = petals.filter(p=>p.active);
-    petals.sort((a,b)=>a.depth-b.depth);
+    /* sort only every 8 frames — depth changes slowly */
+    if (S.frame % 8 === 0) petals.sort((a,b)=>a.depth-b.depth);
     petals.forEach(p => { p.update(S.bloom, withering); p.draw(); });
   }
 
