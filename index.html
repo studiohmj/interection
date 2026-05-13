@@ -141,8 +141,14 @@
   <!-- end button (top-left) -->
   <button id="btn-end" class="btn-end">× End</button>
 
-  <!-- gesture guide button (top-center) -->
-  <button id="btn-guide" class="btn-guide">Gesture Guide</button>
+  <!-- color cycle button -->
+  <button id="btn-color" class="btn-color">Color ◐</button>
+
+  <!-- guide buttons -->
+  <div class="btn-guide-row">
+    <button id="btn-cam-guide" class="btn-guide">Camera Guide</button>
+    <button id="btn-mouse-guide" class="btn-guide">Mouse Guide</button>
+  </div>
 
   <!-- real-time gesture indicator -->
   <div id="gest-indicator" class="gest-indicator">
@@ -156,6 +162,10 @@
     <button class="obj-btn" data-idx="1">Lotus</button>
     <button class="obj-btn" data-idx="2">Crystal</button>
     <button class="obj-btn" data-idx="3">Dandelion</button>
+    <button class="obj-btn" data-idx="4">Rose</button>
+    <button class="obj-btn" data-idx="5">Jellyfish</button>
+    <button class="obj-btn" data-idx="6">Snowflake</button>
+    <button class="obj-btn" data-idx="7">Orbit</button>
   </div>
 
   <!-- hold indicator — appears on mousedown in mouse mode -->
@@ -239,29 +249,15 @@
         <div class="gg-card">
           <div class="gg-sym">☝</div>
           <p class="gg-cname">Pointing</p>
-          <p class="gg-cdesc">검지로 가리키면 손끝에서<br>꽃 중심으로 빛줄기가 뻗습니다</p>
-          <span class="gg-ctag gold">SPOTLIGHT</span>
+          <p class="gg-cdesc">검지로 가리키면 꽃이<br>손끝을 따라 이동합니다</p>
+          <span class="gg-ctag gold">SPOTLIGHT + MOVE</span>
         </div>
 
         <div class="gg-card">
           <div class="gg-sym">🤘</div>
           <p class="gg-cname">Rock Sign</p>
-          <p class="gg-cdesc">록 사인을 만들 때마다<br>꽃의 색상 테마가 순환합니다</p>
-          <span class="gg-ctag purple">COLOR SHIFT × 4</span>
-        </div>
-
-        <div class="gg-card">
-          <div class="gg-sym">🤏</div>
-          <p class="gg-cname">Pinch</p>
-          <p class="gg-cdesc">엄지와 검지를 모으면<br>꽃이 피고 지는 속도가 느려집니다</p>
-          <span class="gg-ctag cyan">SLOW TIME</span>
-        </div>
-
-        <div class="gg-card">
-          <div class="gg-sym">👍</div>
-          <p class="gg-cname">Thumbs Up</p>
-          <p class="gg-cdesc">엄지를 세우는 동안 꽃이<br>만개 상태를 유지하고 꽃잎이 쏟아집니다</p>
-          <span class="gg-ctag gold">FULL BLOOM HOLD</span>
+          <p class="gg-cdesc">록 사인을 0.6초 유지하면<br>꽃의 색상 테마가 바뀝니다</p>
+          <span class="gg-ctag purple">COLOR SHIFT</span>
         </div>
 
         <div class="gg-card">
@@ -272,7 +268,7 @@
         </div>
 
       </div>
-      <p class="gg-note">꽃 종류는 우측 하단 버튼으로 선택 · Peony · Lotus · Crystal · Dandelion</p>
+      <p class="gg-note">오브젝트 8가지 · 우측 하단 버튼으로 선택 · Peony · Lotus · Crystal · Dandelion · Rose · Jellyfish · Snowflake · Orbit</p>
     </div>
 
     <!-- ── Mouse / Touch panel ── -->
@@ -280,30 +276,37 @@
       <div class="gg-grid gg-grid-mouse">
 
         <div class="gg-card">
-          <div class="gg-sym gg-sym-icon">↔</div>
-          <p class="gg-cname">Left · Right</p>
-          <p class="gg-cdesc">홈 화면에서 마우스를<br>좌우로 움직이면 꽃이 피고 집니다</p>
-          <span class="gg-ctag pink">HOME BLOOM</span>
+          <div class="gg-sym gg-sym-icon">◐</div>
+          <p class="gg-cname">Color Button</p>
+          <p class="gg-cdesc">Color 버튼을 클릭하면<br>오브젝트의 색상 테마가 바뀝니다</p>
+          <span class="gg-ctag purple">COLOR SHIFT</span>
         </div>
 
         <div class="gg-card">
           <div class="gg-sym gg-sym-icon">▼</div>
           <p class="gg-cname">Click &amp; Hold</p>
-          <p class="gg-cdesc">캔버스에서 마우스를 꾹 누르면<br>꽃이 점점 시들어 갑니다</p>
-          <span class="gg-ctag dim">WITHER</span>
+          <p class="gg-cdesc">꾹 누르면 꽃이 지고<br>떼도 유지 · 클릭하면 다시 핍니다</p>
+          <span class="gg-ctag dim">WITHER · HOLD</span>
         </div>
 
         <div class="gg-card">
-          <div class="gg-sym gg-sym-icon">▲</div>
-          <p class="gg-cname">Release</p>
-          <p class="gg-cdesc">버튼을 놓으면<br>꽃이 다시 만개합니다</p>
-          <span class="gg-ctag pink">BLOOM</span>
+          <div class="gg-sym gg-sym-icon">◎</div>
+          <p class="gg-cname">Double Click</p>
+          <p class="gg-cdesc">더블클릭하면 꽃잎이<br>화면 가득 쏟아집니다</p>
+          <span class="gg-ctag rose">PETAL STORM</span>
+        </div>
+
+        <div class="gg-card">
+          <div class="gg-sym gg-sym-icon">⇅</div>
+          <p class="gg-cname">Scroll Wheel</p>
+          <p class="gg-cdesc">스크롤로 꽃의<br>개화 정도를 직접 조절합니다</p>
+          <span class="gg-ctag pink">BLOOM CONTROL</span>
         </div>
 
         <div class="gg-card">
           <div class="gg-sym gg-sym-icon">⊞</div>
           <p class="gg-cname">Flower Type</p>
-          <p class="gg-cdesc">우측 하단 버튼으로<br>꽃 종류를 선택합니다</p>
+          <p class="gg-cdesc">우측 하단 버튼으로<br>8가지 꽃을 선택합니다</p>
           <span class="gg-ctag rose">SELECT</span>
         </div>
 

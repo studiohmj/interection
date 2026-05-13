@@ -63,9 +63,9 @@ button { font-family:inherit; cursor:none; background:none; border:none; }
   padding: 48px 52px 60px;
   background: linear-gradient(
     to bottom,
-    rgba(6,6,7,0.80) 0%,
-    rgba(6,6,7,0.06) 26%,
-    rgba(6,6,7,0.06) 58%,
+    rgba(6,6,7,0.85) 0%,
+    rgba(6,6,7,0.12) 22%,
+    rgba(6,6,7,0.22) 50%,
     rgba(6,6,7,0.72) 76%,
     rgba(6,6,7,1.00) 90%,
     rgba(6,6,7,1.00) 100%
@@ -87,6 +87,8 @@ button { font-family:inherit; cursor:none; background:none; border:none; }
   flex-direction: column;
   align-items: center;
   gap: 14px;
+  background: radial-gradient(ellipse at center, rgba(6,6,7,0.58) 0%, transparent 68%);
+  padding: 48px 72px;
 }
 
 .vid-title {
@@ -110,14 +112,16 @@ button { font-family:inherit; cursor:none; background:none; border:none; }
 .vid-ko {
   font-size: 17px;
   font-weight: 300;
-  color: rgba(236,234,227,0.75);
+  color: rgba(236,234,227,0.92);
   letter-spacing: 0.3px;
+  text-shadow: 0 2px 18px rgba(6,6,7,0.95), 0 0 48px rgba(6,6,7,0.7);
 }
 .vid-en {
   font-size: 12px;
   font-weight: 300;
-  color: rgba(236,234,227,0.5);
+  color: rgba(236,234,227,0.70);
   letter-spacing: 3px;
+  text-shadow: 0 1px 12px rgba(6,6,7,0.95), 0 0 36px rgba(6,6,7,0.75);
 }
 
 .vid-status {
@@ -128,8 +132,9 @@ button { font-family:inherit; cursor:none; background:none; border:none; }
   font-weight: 400;
   letter-spacing: 3px;
   text-transform: uppercase;
-  color: rgba(236,234,227,0.5);
+  color: rgba(236,234,227,0.65);
   margin-top: 6px;
+  text-shadow: 0 1px 10px rgba(6,6,7,0.9);
 }
 .vst-dot {
   width: 5px; height: 5px;
@@ -412,7 +417,7 @@ body.hovering #cursor {
   font-weight: 400;
   letter-spacing: 4px;
   text-transform: uppercase;
-  color: rgba(236,234,227,0.55);
+  color: rgba(236,234,227,0.82);
   transition: color 0.5s;
 }
 .tracking-ui.tracking { color: rgba(255,79,163,0.85); }
@@ -482,14 +487,14 @@ body.hovering #cursor {
 .guide-ko {
   font-size: 16px;
   font-weight: 300;
-  color: var(--dim);
+  color: rgba(236,234,227,0.88);
   line-height: 1.8;
   letter-spacing: 0.5px;
 }
 .guide-en {
   font-size: 11px;
   font-weight: 300;
-  color: rgba(236,234,227,0.5);
+  color: rgba(236,234,227,0.78);
   letter-spacing: 3px;
 }
 .guide-modes {
@@ -500,7 +505,7 @@ body.hovering #cursor {
   font-weight: 400;
   letter-spacing: 3px;
   text-transform: uppercase;
-  color: rgba(236,234,227,0.45);
+  color: rgba(236,234,227,0.75);
   margin-top: 4px;
 }
 .mode-btn { transition: color 0.3s; }
@@ -536,7 +541,7 @@ body.hovering #cursor {
   font-size: 9px;
   font-weight: 400;
   letter-spacing: 3px;
-  color: rgba(236,234,227,0.5);
+  color: rgba(236,234,227,0.88);
 }
 
 /* end button — top left */
@@ -547,7 +552,7 @@ body.hovering #cursor {
   font-weight: 400;
   letter-spacing: 4px;
   text-transform: uppercase;
-  color: rgba(236,234,227,0.65);
+  color: rgba(236,234,227,0.90);
   transition: color 0.3s;
 }
 .btn-end:hover { color: var(--fg); }
@@ -692,7 +697,7 @@ body.hovering #cursor {
   font-weight: 500;
   letter-spacing: 3px;
   text-transform: uppercase;
-  color: rgba(236,234,227,0.35);
+  color: rgba(236,234,227,0.65);
   padding: 6px 0 6px 24px;
   text-align: right;
   transition: color 0.3s;
@@ -732,19 +737,25 @@ body.hovering #cursor {
 .btn-vid-guide:hover { color: rgba(255,79,163,0.7); }
 
 /* ═══════════════════════════════════
-   INTERACT — GESTURE GUIDE BUTTON
+   INTERACT — GUIDE BUTTONS ROW
 ═══════════════════════════════════ */
-.btn-guide {
+.btn-guide-row {
   position: absolute;
   top: 40px;
   left: 50%;
   transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+.btn-guide {
   font-size: 10px;
   font-weight: 400;
   letter-spacing: 4px;
   text-transform: uppercase;
-  color: rgba(236,234,227,0.3);
-  border: 1px solid rgba(236,234,227,0.08);
+  color: rgba(236,234,227,0.72);
+  border: 1px solid rgba(236,234,227,0.20);
   padding: 7px 18px;
   transition: color 0.3s, border-color 0.3s;
 }
@@ -754,11 +765,34 @@ body.hovering #cursor {
 }
 
 /* ═══════════════════════════════════
+   INTERACT — COLOR CYCLE BUTTON
+═══════════════════════════════════ */
+.btn-color {
+  position: absolute;
+  top: 78px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: rgba(236,234,227,0.72);
+  border: 1px solid rgba(236,234,227,0.20);
+  padding: 7px 20px;
+  white-space: nowrap;
+  transition: color 0.3s, border-color 0.3s;
+}
+.btn-color:hover {
+  color: rgba(167,139,250,0.9);
+  border-color: rgba(167,139,250,0.35);
+}
+
+/* ═══════════════════════════════════
    GESTURE INDICATOR
 ═══════════════════════════════════ */
 .gest-indicator {
   position: absolute;
-  top: 88px;
+  top: 118px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -891,9 +925,9 @@ body.hovering #cursor {
   background: rgba(236,234,227,0.06);
 }
 
-/* Mouse guide: 4 cards → 4-col single row */
+/* Mouse guide: 5 cards → 5-col single row */
 .gg-grid-mouse {
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
 }
 
 /* Large text symbols (mouse guide) — styled differently from emoji */
@@ -1020,9 +1054,11 @@ body.hovering #cursor {
 
   /* ── INTERACT ── */
   .tracking-ui    { top: 16px; right: 16px; font-size: 10px; letter-spacing: 2px; }
-  .btn-end        { top: 16px; left: 16px; font-size: 12px; }
-  .btn-guide      { top: 16px; font-size: 9px; padding: 6px 12px; letter-spacing: 3px; }
-  .gest-indicator { top: 66px; font-size: 9px; padding: 5px 12px; letter-spacing: 3px; }
+  .btn-end           { top: 16px; left: 16px; font-size: 12px; }
+  .btn-guide-row     { top: 16px; gap: 6px; }
+  .btn-guide         { font-size: 9px; padding: 5px 10px; letter-spacing: 2px; }
+  .btn-color         { top: 52px; font-size: 9px; padding: 5px 12px; letter-spacing: 2px; }
+  .gest-indicator    { top: 90px; font-size: 9px; padding: 5px 12px; letter-spacing: 3px; }
   .bloom-bar-wrap { left: 10px; }
   .bloom-bar-track{ height: 100px; }
   .cam-preview    { width: 140px; height: 105px; bottom: 24px; left: 16px; }

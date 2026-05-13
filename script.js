@@ -34,6 +34,7 @@ const G = {
   rockHeldSince:0,   // dwell timer for rock
   parallaxX:    0,
   parallaxY:    0,
+  mouseHue:     0,
 };
 
 const setTarget = v => { S.target = Math.max(0, Math.min(1, v)); };
@@ -47,7 +48,7 @@ const setCSS = () => {
 /* pointer:coarse = finger/touch primary input (not mouse). More reliable than
    maxTouchPoints which is > 0 on Windows even without a touchscreen display. */
 const isMobile  = window.matchMedia('(pointer: coarse)').matches;
-const FRAME_MS  = isMobile ? 34 : 16;  // 30fps mobile, 60fps desktop
+let FRAME_MS  = isMobile ? 34 : 16;  // 30fps mobile; raised to 34 when camera active on desktop
 let   _lastFrameT = 0;
 let   _lastFilterStr = '';
 
@@ -764,6 +765,322 @@ class DandelionRenderer {
 }
 
 /* ═══════════════════════════════════════════
+   BASE PETAL RENDERER  (Rose)
+═══════════════════════════════════════════ */
+class BasePetalRenderer {
+  constructor(layers, glowHue, centerHue, delays) {
+    this.t=0; this.witherOffset=0; this.prevRenderBloom=0;
+    this._gh=glowHue; this._ch=centerHue;
+    this._del=delays||layers.map((_,i)=>i*0.10);
+    this.petals=this._build(layers);
+  }
+  _build(layers){
+    const out=[];
+    layers.forEach(({li,n,r,len,w,hb,hv,Lb,Ld})=>{
+      for(let i=0;i<n;i++) out.push({
+        li, maxR:r, len, w, angle:(i/n)*Math.PI*2+li*0.35,
+        hue:hb+(Math.random()-0.5)*hv,
+        Lbase:Lb+(Math.random()-0.5)*4, Ltip:Lb+Ld+(Math.random()-0.5)*5,
+        ph:Math.random()*Math.PI*2, dropPh:Math.random()*Math.PI*2
+      });
+    });
+    return out.sort((a,b)=>a.li-b.li);
+  }
+  _lb(p,bloom){const d=this._del[p.li]??0;return Math.min(1,Math.max(0,(bloom-d)/(1.001-d)));}
+  render(bloom){
+    this.t++;
+    const W=cv.width,H=cv.height,cx=W/2+G.parallaxX,cy=H/2+G.parallaxY;
+    const withering=bloom<this.prevRenderBloom-0.002;
+    this.witherOffset+=withering?Math.min(0.04,(this.prevRenderBloom-bloom)*1.1):-this.witherOffset*0.06;
+    this.witherOffset=Math.max(0,Math.min(Math.PI*0.25,this.witherOffset));
+    this.prevRenderBloom=bloom;
+    ctx.fillStyle='#050506'; ctx.fillRect(0,0,W,H);
+    if(bloom>0.04){
+      const g=ctx.createRadialGradient(cx,cy,0,cx,cy,W*0.42);
+      g.addColorStop(0,  `hsla(${this._gh},75%,52%,${(bloom*0.13).toFixed(3)})`);
+      g.addColorStop(0.45,`hsla(${this._gh+15},50%,28%,${(bloom*0.05).toFixed(3)})`);
+      g.addColorStop(1,'transparent');
+      ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+    }
+    this.petals.forEach(p=>this._petal(p,bloom,cx,cy));
+    this._stamen(bloom,cx,cy);
+    const v=ctx.createRadialGradient(cx,cy,W*0.22,cx,cy,W*0.74);
+    v.addColorStop(0,'transparent'); v.addColorStop(1,'rgba(0,0,0,0.70)');
+    ctx.fillStyle=v; ctx.fillRect(0,0,W,H);
+  }
+  _petal(p,bloom,cx,cy){
+    const b=this._lb(p,bloom); if(b<0.005)return;
+    const breathe=1+Math.sin(this.t*0.013+p.ph)*0.013*b;
+    const droop=this.witherOffset*(1+p.li*0.3)*Math.sin(p.dropPh+p.angle);
+    const fa=p.angle+droop, r=p.maxR*(0.05+b*0.95);
+    const px=cx+Math.cos(fa)*r, py=cy+Math.sin(fa)*r;
+    const sc=(0.03+b*0.97)*breathe, len=p.len, hw=len*p.w;
+    const sat=(15+b*72)*(0.3+bloom*0.7);
+    ctx.save();
+    ctx.translate(px,py); ctx.rotate(fa+Math.PI/2); ctx.scale(sc,sc);
+    ctx.globalAlpha=0.04+b*0.96;
+    const gr=ctx.createLinearGradient(0,-len*0.18,0,len);
+    gr.addColorStop(0,  `hsl(${p.hue+7},${(sat*.6).toFixed(1)}%,${p.Lbase-14}%)`);
+    gr.addColorStop(0.5,`hsl(${p.hue},  ${sat.toFixed(1)}%,     ${p.Lbase}%)`);
+    gr.addColorStop(1,  `hsl(${p.hue-7},${(sat*.5).toFixed(1)}%,${p.Ltip}%)`);
+    ctx.fillStyle=gr;
+    ctx.beginPath(); ctx.moveTo(0,-len*0.14);
+    ctx.bezierCurveTo(hw*1.05,-len*0.06,hw*1.1,len*0.55,0,len);
+    ctx.bezierCurveTo(-hw*1.1,len*0.55,-hw*1.05,-len*0.06,0,-len*0.14);
+    ctx.fill(); ctx.restore();
+  }
+  _stamen(bloom,cx,cy){
+    if(bloom<0.04)return;
+    const b=Math.min(1,bloom*1.4), r=3+bloom*16;
+    ctx.save(); ctx.globalAlpha=0.3+b*0.7;
+    ctx.shadowColor=`hsl(${this._ch},80%,62%)`; ctx.shadowBlur=22*b;
+    const cg=ctx.createRadialGradient(cx,cy,0,cx,cy,r);
+    cg.addColorStop(0,`hsl(${this._ch},${(22+b*58).toFixed(0)}%,${(30+b*22).toFixed(0)}%)`);
+    cg.addColorStop(1,`hsl(${this._ch},${(16+b*48).toFixed(0)}%,${(18+b*16).toFixed(0)}%)`);
+    ctx.fillStyle=cg; ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+}
+
+/* Rose — deep crimson, dense petals */
+class RoseRenderer extends BasePetalRenderer {
+  constructor(){super([
+    {li:0,n:12,r:215,len:88,w:.38,hb:4, hv:7, Lb:36,Ld:30},
+    {li:1,n:8, r:136,len:68,w:.43,hb:6, hv:5, Lb:42,Ld:24},
+    {li:2,n:5, r:64, len:46,w:.50,hb:8, hv:4, Lb:47,Ld:18},
+  ],5,5,[0,.08,.18]);}
+}
+
+/* ── JELLYFISH ── translucent bell + tentacles */
+class JellyfishRenderer {
+  constructor() {
+    this.t=0; this.witherOffset=0; this.prevRenderBloom=0;
+    const tCount = isMobile ? 8 : 14;
+    this.tentacles = Array.from({length:tCount},(_,i)=>({
+      angle:(i/tCount)*Math.PI*2, phase:Math.random()*Math.PI*2,
+      lenM:0.65+Math.random()*0.70, thick:0.9+Math.random()*1.1,
+      hue:188+(Math.random()-0.5)*30, freq:0.018+Math.random()*0.014,
+    }));
+  }
+  render(bloom) {
+    this.t++;
+    const W=cv.width,H=cv.height,cx=W/2+G.parallaxX,cy=H/2+G.parallaxY;
+    const withering=bloom<this.prevRenderBloom-0.002;
+    this.witherOffset+=withering?Math.min(0.04,(this.prevRenderBloom-bloom)*1.2):-this.witherOffset*0.06;
+    this.witherOffset=Math.max(0,Math.min(0.55,this.witherOffset));
+    this.prevRenderBloom=bloom;
+    ctx.fillStyle='#050506'; ctx.fillRect(0,0,W,H);
+    if(bloom<0.01)return;
+    const bR=bloom*155, bH=bR*0.52;
+    const g=ctx.createRadialGradient(cx,cy,0,cx,cy,bR*2.8);
+    g.addColorStop(0,`rgba(60,200,255,${bloom*0.11})`);
+    g.addColorStop(0.5,`rgba(20,100,220,${bloom*0.04})`);
+    g.addColorStop(1,'transparent');
+    ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+    // tentacles
+    const tLen=bloom*200*(1+this.witherOffset*0.8);
+    this.tentacles.forEach(t=>{
+      const rx=cx+Math.cos(t.angle)*bR*0.82, ry=cy+bH*0.78;
+      const wx=Math.sin(this.t*t.freq+t.phase)*16*bloom;
+      const len=tLen*t.lenM;
+      ctx.save();
+      ctx.globalAlpha=0.3+bloom*0.45;
+      ctx.strokeStyle=`hsla(${t.hue},72%,74%,0.85)`;
+      ctx.lineWidth=t.thick*bloom;
+      ctx.shadowColor=`hsl(${t.hue},85%,78%)`; ctx.shadowBlur=isMobile?0:5; ctx.lineCap='round';
+      ctx.beginPath(); ctx.moveTo(rx,ry);
+      ctx.bezierCurveTo(rx+wx*0.5,ry+len*0.28,rx+wx*(-0.6),ry+len*0.62,rx+wx*0.3,ry+len);
+      ctx.stroke(); ctx.restore();
+    });
+    // bell
+    ctx.save();
+    const bg=ctx.createRadialGradient(cx,cy-bH*0.18,bR*0.05,cx,cy,bR*1.1);
+    bg.addColorStop(0,`rgba(160,230,255,${bloom*0.42})`);
+    bg.addColorStop(0.45,`rgba(55,150,245,${bloom*0.24})`);
+    bg.addColorStop(0.82,`rgba(18,75,200,${bloom*0.10})`);
+    bg.addColorStop(1,'rgba(8,30,120,0)');
+    ctx.globalAlpha=0.88; ctx.fillStyle=bg;
+    ctx.shadowColor='rgba(80,200,255,0.55)'; ctx.shadowBlur=28*bloom;
+    ctx.beginPath(); ctx.moveTo(cx-bR,cy);
+    ctx.ellipse(cx,cy,bR,bH,0,Math.PI,0,true);
+    ctx.bezierCurveTo(cx+bR*0.65,cy+bH*0.32,cx-bR*0.65,cy+bH*0.32,cx-bR,cy);
+    ctx.closePath(); ctx.fill();
+    ctx.globalAlpha=bloom*0.65;
+    ctx.strokeStyle='rgba(175,235,255,0.8)'; ctx.lineWidth=1.6; ctx.shadowBlur=16;
+    ctx.beginPath(); ctx.ellipse(cx,cy,bR,bH,0,Math.PI,0,true); ctx.stroke();
+    if(bloom>0.35){
+      const rA=Math.min(1,(bloom-0.35)*1.8);
+      for(let i=1;i<=3;i++){
+        ctx.globalAlpha=rA*0.16; ctx.strokeStyle='rgba(195,240,255,0.7)';
+        ctx.lineWidth=0.65; ctx.shadowBlur=5;
+        ctx.beginPath();
+        ctx.ellipse(cx,cy-bH*0.08,bR*(0.28+i*0.22),bH*(0.28+i*0.22)*0.58,0,Math.PI,0,true);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+    const cg=ctx.createRadialGradient(cx,cy-bH*0.28,0,cx,cy-bH*0.28,bR*0.42);
+    cg.addColorStop(0,`rgba(205,248,255,${bloom*0.58})`);
+    cg.addColorStop(0.6,`rgba(70,180,255,${bloom*0.14})`);
+    cg.addColorStop(1,'rgba(20,90,200,0)');
+    ctx.save(); ctx.globalAlpha=0.78; ctx.fillStyle=cg;
+    ctx.beginPath(); ctx.ellipse(cx,cy-bH*0.28,bR*0.42,bH*0.32,0,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+    const v=ctx.createRadialGradient(cx,cy,W*0.22,cx,cy,W*0.74);
+    v.addColorStop(0,'transparent'); v.addColorStop(1,'rgba(0,0,0,0.72)');
+    ctx.fillStyle=v; ctx.fillRect(0,0,W,H);
+  }
+}
+
+/* ── SNOWFLAKE ── 6-fold crystalline arms */
+class SnowflakeRenderer {
+  constructor() {
+    this.t=0; this.witherOffset=0; this.prevRenderBloom=0;
+    this.subPos=[0.27,0.48,0.67,0.84];
+    this.subLen=[0.52,0.44,0.36,0.28];
+  }
+  render(bloom) {
+    this.t++;
+    const W=cv.width,H=cv.height,cx=W/2+G.parallaxX,cy=H/2+G.parallaxY;
+    const withering=bloom<this.prevRenderBloom-0.002;
+    this.witherOffset+=withering?Math.min(0.03,(this.prevRenderBloom-bloom)*0.9):-this.witherOffset*0.08;
+    this.witherOffset=Math.max(0,Math.min(0.5,this.witherOffset));
+    this.prevRenderBloom=bloom;
+    ctx.fillStyle='#050506'; ctx.fillRect(0,0,W,H);
+    if(bloom<0.01)return;
+    const maxLen=Math.min(W,H)*0.37;
+    const armLen=bloom*maxLen*(1-this.witherOffset*0.65);
+    const rot=this.t*0.0038;
+    const g=ctx.createRadialGradient(cx,cy,0,cx,cy,maxLen);
+    g.addColorStop(0,`rgba(160,215,255,${bloom*0.10})`);
+    g.addColorStop(0.5,`rgba(80,155,245,${bloom*0.04})`);
+    g.addColorStop(1,'transparent');
+    ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+    ctx.save(); ctx.translate(cx,cy); ctx.rotate(rot);
+    for(let i=0;i<6;i++){
+      ctx.save(); ctx.rotate((i/6)*Math.PI*2); this._arm(armLen,bloom); ctx.restore();
+    }
+    ctx.restore();
+    const cr=5+bloom*15;
+    ctx.save(); ctx.globalAlpha=0.55+bloom*0.45;
+    ctx.shadowColor='rgba(200,235,255,1)'; ctx.shadowBlur=28*bloom;
+    const cg=ctx.createRadialGradient(cx,cy,0,cx,cy,cr);
+    cg.addColorStop(0,'rgba(242,252,255,1)'); cg.addColorStop(0.55,'rgba(165,215,255,0.85)');
+    cg.addColorStop(1,'rgba(80,155,255,0.2)');
+    ctx.fillStyle=cg; ctx.beginPath(); ctx.arc(cx,cy,cr,0,Math.PI*2); ctx.fill(); ctx.restore();
+    const v=ctx.createRadialGradient(cx,cy,W*0.2,cx,cy,W*0.72);
+    v.addColorStop(0,'transparent'); v.addColorStop(1,'rgba(0,0,0,0.72)');
+    ctx.fillStyle=v; ctx.fillRect(0,0,W,H);
+  }
+  _arm(len,bloom) {
+    if(len<2)return;
+    const blurMain = isMobile ? 0 : 8+bloom*12;
+    const blurSub  = isMobile ? 0 : 5;
+    ctx.globalAlpha=0.82+bloom*0.18;
+    ctx.strokeStyle='rgba(205,235,255,0.92)';
+    ctx.lineWidth=1.5+bloom*1.5;
+    ctx.shadowColor='rgba(170,220,255,0.85)'; ctx.shadowBlur=blurMain; ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(len,0); ctx.stroke();
+    ctx.globalAlpha=0.7+bloom*0.3; ctx.shadowBlur=isMobile?0:14*bloom;
+    ctx.fillStyle='rgba(225,245,255,0.92)';
+    ctx.beginPath(); ctx.arc(len,0,2+bloom*3.2,0,Math.PI*2); ctx.fill();
+    if(bloom>0.16){
+      const sA=Math.min(1,(bloom-0.16)*2.6);
+      this.subPos.forEach((sp,si)=>{
+        const bx=sp*len, sLen=len*this.subLen[si]*sA;
+        if(sLen<1)return;
+        [-1,1].forEach(side=>{
+          ctx.save(); ctx.translate(bx,0); ctx.rotate(side*Math.PI/3);
+          ctx.globalAlpha=sA*0.72; ctx.lineWidth=1.0+bloom*0.85; ctx.shadowBlur=blurSub;
+          ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(sLen,0); ctx.stroke();
+          if(!isMobile && bloom>0.58){
+            const tA=Math.min(1,(bloom-0.58)*2.4), tLen=sLen*0.42*tA;
+            [-1,1].forEach(ts=>{
+              ctx.save(); ctx.translate(sLen*0.52,0); ctx.rotate(ts*Math.PI/3);
+              ctx.globalAlpha=tA*0.48; ctx.lineWidth=0.7; ctx.shadowBlur=0;
+              ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(tLen,0); ctx.stroke();
+              ctx.restore();
+            });
+          }
+          ctx.restore();
+        });
+      });
+    }
+  }
+}
+
+/* ── ORBIT ── atom with tilted electron rings */
+class OrbitRenderer {
+  constructor() {
+    this.t=0; this.witherOffset=0; this.prevRenderBloom=0;
+    this.rings=[
+      {n:2,r:78, speed:0.024,tilt:0,            col:[255,218,80]},
+      {n:3,r:138,speed:0.016,tilt:Math.PI/2.8,  col:[80,210,255]},
+      {n:4,r:192,speed:0.011,tilt:Math.PI*2/3,  col:[180,100,255]},
+    ];
+  }
+  render(bloom) {
+    this.t++;
+    const W=cv.width,H=cv.height,cx=W/2+G.parallaxX,cy=H/2+G.parallaxY;
+    const withering=bloom<this.prevRenderBloom-0.002;
+    this.witherOffset+=withering?Math.min(0.03,(this.prevRenderBloom-bloom)*1.0):-this.witherOffset*0.07;
+    this.witherOffset=Math.max(0,Math.min(0.5,this.witherOffset));
+    this.prevRenderBloom=bloom;
+    ctx.fillStyle='#050506'; ctx.fillRect(0,0,W,H);
+    if(bloom<0.01)return;
+    const g=ctx.createRadialGradient(cx,cy,0,cx,cy,260);
+    g.addColorStop(0,`rgba(255,200,60,${bloom*0.10})`);
+    g.addColorStop(0.5,`rgba(160,80,255,${bloom*0.04})`);
+    g.addColorStop(1,'transparent');
+    ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+    const thresh=[0,0.33,0.68], sc=1-this.witherOffset*0.6;
+    this.rings.forEach((ring,ri)=>{
+      if(bloom<thresh[ri]+0.02)return;
+      const rA=Math.min(1,(bloom-thresh[ri])*3.5);
+      const r=ring.r*sc*Math.min(1,rA*1.6);
+      const [rr,gg,bb]=ring.col;
+      ctx.save(); ctx.translate(cx,cy); ctx.rotate(ring.tilt);
+      ctx.shadowBlur=0;   /* 링 outline은 blur 없음 */
+      ctx.globalAlpha=rA*0.28;
+      ctx.strokeStyle=`rgba(${rr},${gg},${bb},0.6)`;
+      ctx.lineWidth=0.85;
+      ctx.shadowColor=`rgba(${rr},${gg},${bb},0.5)`;
+      ctx.beginPath(); ctx.ellipse(0,0,r,r*0.42,0,0,Math.PI*2); ctx.stroke();
+      for(let e=0;e<ring.n;e++){
+        const ang=(e/ring.n)*Math.PI*2+this.t*ring.speed;
+        const ex=Math.cos(ang)*r, ey=Math.sin(ang)*r*0.42;
+        ctx.shadowBlur=0;
+        for(let tr=5;tr>=1;tr--){
+          const ta=ang-tr*ring.speed*12;
+          const tx=Math.cos(ta)*r, ty=Math.sin(ta)*r*0.42;
+          ctx.globalAlpha=rA*(0.055-tr*0.008);
+          ctx.fillStyle=`rgba(${rr},${gg},${bb},0.8)`;
+          ctx.beginPath(); ctx.arc(tx,ty,(4.5-tr*0.6)*rA,0,Math.PI*2); ctx.fill();
+        }
+        ctx.globalAlpha=rA*0.92;
+        ctx.shadowColor=`rgba(${rr},${gg},${bb},1)`;
+        ctx.shadowBlur=isMobile?0:18;
+        ctx.fillStyle=`rgba(${rr},${gg},${bb},0.95)`;
+        ctx.beginPath(); ctx.arc(ex,ey,4.2*rA,0,Math.PI*2); ctx.fill();
+      }
+      ctx.restore();
+    });
+    const nr=8+bloom*14;
+    ctx.save(); ctx.globalAlpha=0.55+bloom*0.45;
+    ctx.shadowColor='rgba(255,210,60,1)'; ctx.shadowBlur=38*bloom;
+    const cg=ctx.createRadialGradient(cx,cy,0,cx,cy,nr);
+    cg.addColorStop(0,`rgba(255,248,200,${0.92+bloom*0.08})`);
+    cg.addColorStop(0.4,`rgba(255,175,40,${0.72+bloom*0.18})`);
+    cg.addColorStop(1,`rgba(215,70,10,${0.28+bloom*0.28})`);
+    ctx.fillStyle=cg; ctx.beginPath(); ctx.arc(cx,cy,nr,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+    const v=ctx.createRadialGradient(cx,cy,W*0.2,cx,cy,W*0.72);
+    v.addColorStop(0,'transparent'); v.addColorStop(1,'rgba(0,0,0,0.72)');
+    ctx.fillStyle=v; ctx.fillRect(0,0,W,H);
+  }
+}
+
+/* ═══════════════════════════════════════════
    FALLING PETAL PARTICLES
 ═══════════════════════════════════════════ */
 const PCLR = [
@@ -1064,7 +1381,7 @@ async function startCamera() {
   let stream;
   try {
     stream = await navigator.mediaDevices.getUserMedia({
-      video: { width:480, height:360, facingMode:'user' }
+      video: { width:320, height:240, facingMode:'user' }
     });
   } catch (_) {
     setStatus('Camera denied', false);
@@ -1075,6 +1392,7 @@ async function startCamera() {
   const camBox = document.getElementById('cam-preview');
   vid.srcObject = stream; camVid.srcObject = stream;
   await vid.play();
+  camVid.play().catch(() => {});
   camBox.classList.remove('hidden');
   setStatus('Loading model…', false);
 
@@ -1082,7 +1400,7 @@ async function startCamera() {
     locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
   });
   hands.setOptions({
-    maxNumHands:2, modelComplexity:0,
+    maxNumHands:1, modelComplexity:0,
     minDetectionConfidence:0.65, minTrackingConfidence:0.50,
   });
   hands.onResults(res => {
@@ -1146,6 +1464,7 @@ async function startCamera() {
   });
 
   S.tracking=true; S.mode='camera';
+  if (!isMobile) FRAME_MS = 34; /* cap render at 30fps to share CPU with MediaPipe */
   updateModeUI('camera');
   setStatus('Hand tracking active', true);
 
@@ -1154,7 +1473,7 @@ async function startCamera() {
   let _lastMpT = 0;
   let _mpBusy  = false;
   /* 시간 기반 스로틀: mobile ~15fps, desktop ~20fps */
-  const MP_MS = isMobile ? 66 : 50;
+  const MP_MS = isMobile ? 80 : 66;
 
   (async function mpLoop() {
     const now = performance.now();
@@ -1189,27 +1508,47 @@ function enableMouse() {
   document.addEventListener('mousedown', e => {
     if (skip(e) || S.mode !== 'mouse') return;
     S.mouseHeld = true;
+    S.mouseHeldAt = Date.now();
     setTarget(0);
     showHoldIndicator(true);
   });
   document.addEventListener('mouseup', () => {
     if (S.mode !== 'mouse') return;
+    const wasHold = (Date.now() - (S.mouseHeldAt || 0)) > 350;
     S.mouseHeld = false;
-    setTarget(1);
+    S.mouseHeldAt = 0;
+    if (!wasHold) setTarget(1);   /* click → bloom; hold → stay withered */
     showHoldIndicator(false);
   });
   document.addEventListener('touchstart', e => {
     if (skip(e) || S.mode !== 'mouse') return;
     S.mouseHeld = true;
+    S.mouseHeldAt = Date.now();
     setTarget(0);
     showHoldIndicator(true);
-  }, { passive: true });
-  document.addEventListener('touchend', () => {
+  }, { passive: false });
+  document.addEventListener('touchend', e => {
     if (S.mode !== 'mouse') return;
+    e.preventDefault();               /* ghost mousedown/mouseup 방지 */
+    const wasHold = (Date.now() - (S.mouseHeldAt || 0)) > 350;
     S.mouseHeld = false;
-    setTarget(1);
+    S.mouseHeldAt = 0;
+    if (!wasHold) setTarget(1);
     showHoldIndicator(false);
+  }, { passive: false });
+
+  document.addEventListener('dblclick', e => {
+    if (skip(e) || S.mode !== 'mouse' || S.stage !== 'interact') return;
+    spawnPetals(62, true);
+    setTarget(1);
   });
+
+  document.addEventListener('wheel', e => {
+    if (S.mode !== 'mouse' || S.stage !== 'interact') return;
+    e.preventDefault();
+    const delta = -e.deltaY * 0.004;
+    setTarget(Math.max(0, Math.min(1, S.target + delta)));
+  }, { passive: false });
 }
 
 function showHoldIndicator(on) {
@@ -1223,7 +1562,7 @@ function updateModeUI(mode) {
   const guide = document.querySelector('.guide-ko');
   if (guide) {
     if (mode === 'mouse') {
-      guide.innerHTML = '꾹 누르면 꽃이 지고<br>손을 떼면 꽃이 핍니다.';
+      guide.innerHTML = '꾹 누르면 꽃이 지고 유지됩니다<br>다시 클릭하면 꽃이 핍니다.';
     } else {
       guide.innerHTML = '손을 펼치면 꽃이 피고<br>손을 쥐면 꽃이 집니다.';
     }
@@ -1342,8 +1681,8 @@ document.addEventListener('touchmove', e => {
 }, { passive: true });
 
 function tickCursor() {
-  cxC += (rawX-cxC) * 0.22;
-  cyC += (rawY-cyC) * 0.22;
+  cxC += (rawX-cxC) * 0.50;
+  cyC += (rawY-cyC) * 0.50;
   curEl.style.left = cxC+'px';
   curEl.style.top  = cyC+'px';
 }
@@ -1361,8 +1700,12 @@ const renderers = [
   new LotusRenderer(),
   new CrystalRenderer(),
   new DandelionRenderer(),
+  new RoseRenderer(),
+  new JellyfishRenderer(),
+  new SnowflakeRenderer(),
+  new OrbitRenderer(),
 ];
-const RENDERER_NAMES = ['Peony', 'Lotus', 'Crystal', 'Dandelion'];
+const RENDERER_NAMES = ['Peony', 'Lotus', 'Crystal', 'Dandelion', 'Rose', 'Jellyfish', 'Snowflake', 'Orbit'];
 let activeRendererIdx = 0;
 
 function cycleRenderer(idx) {
@@ -1393,15 +1736,21 @@ function loop(now) {
 
   /* color / parallax only needed in interact stage */
   if (S.stage === 'interact') {
-    G.colorAngle += (COLOR_ANGLES[G.colorMode] - G.colorAngle) * 0.035;
+    const _tHue = COLOR_ANGLES[G.colorMode];
+    G.colorAngle += (_tHue - G.colorAngle) * 0.035;
     const _newFilter = Math.abs(G.colorAngle) > 0.5 ? `hue-rotate(${G.colorAngle.toFixed(1)}deg)` : '';
     if (_newFilter !== _lastFilterStr) { cv.style.filter = _newFilter; _lastFilterStr = _newFilter; }
 
-    if (G.palmPos && S.handOn) {
-      const tx = ((0.5 - G.palmPos.x)) * cv.width  * 0.10;
-      const ty = ((G.palmPos.y - 0.5)) * cv.height * 0.10;
-      G.parallaxX += (tx - G.parallaxX) * 0.06;
-      G.parallaxY += (ty - G.parallaxY) * 0.06;
+    if (S.handOn) {
+      /* pointing: use fingertip for more precise flower tracking */
+      const src    = (G.gesture === 'point' && G.indexTip) ? G.indexTip : G.palmPos;
+      const factor = G.gesture === 'point' ? 0.18 : 0.12;
+      if (src) {
+        const tx = ((0.5 - src.x)) * cv.width  * factor;
+        const ty = ((src.y - 0.5)) * cv.height * factor;
+        G.parallaxX += (tx - G.parallaxX) * 0.10;
+        G.parallaxY += (ty - G.parallaxY) * 0.10;
+      }
     } else {
       G.parallaxX *= 0.92;
       G.parallaxY *= 0.92;
@@ -1552,9 +1901,44 @@ function bindButtons() {
 
   document.getElementById('btn-vid-guide').addEventListener('click', () => goTo('gestures'));
 
-  document.getElementById('btn-guide').addEventListener('click', () => goTo('gestures'));
-  document.getElementById('btn-guide').addEventListener('mouseenter', () => document.body.classList.add('hovering'));
-  document.getElementById('btn-guide').addEventListener('mouseleave', () => document.body.classList.remove('hovering'));
+  /* Camera Guide → gestures page, cam tab pre-selected */
+  const _btnCamGuide = document.getElementById('btn-cam-guide');
+  if (_btnCamGuide) {
+    _btnCamGuide.addEventListener('click', () => {
+      /* activate cam tab */
+      document.querySelectorAll('.gg-tab').forEach(t => t.classList.toggle('gg-tab-active', t.dataset.panel === 'cam'));
+      document.querySelectorAll('.gg-panel').forEach(p => p.classList.toggle('gg-panel-off', p.id !== 'gg-panel-cam'));
+      const sub = document.getElementById('gg-subtitle');
+      if (sub) sub.innerHTML = '손 모양에 따라 다른 인터렉션이 활성화됩니다<br>카메라 모드에서만 작동합니다';
+      goTo('gestures');
+    });
+    _btnCamGuide.addEventListener('mouseenter', () => document.body.classList.add('hovering'));
+    _btnCamGuide.addEventListener('mouseleave', () => document.body.classList.remove('hovering'));
+  }
+
+  /* Mouse Guide → gestures page, mouse tab pre-selected */
+  const _btnMouseGuide = document.getElementById('btn-mouse-guide');
+  if (_btnMouseGuide) {
+    _btnMouseGuide.addEventListener('click', () => {
+      document.querySelectorAll('.gg-tab').forEach(t => t.classList.toggle('gg-tab-active', t.dataset.panel === 'mouse'));
+      document.querySelectorAll('.gg-panel').forEach(p => p.classList.toggle('gg-panel-off', p.id !== 'gg-panel-mouse'));
+      const sub = document.getElementById('gg-subtitle');
+      if (sub) sub.innerHTML = '마우스 클릭과 위치로 꽃을 제어합니다<br>터치 기기에서도 동일하게 작동합니다';
+      goTo('gestures');
+    });
+    _btnMouseGuide.addEventListener('mouseenter', () => document.body.classList.add('hovering'));
+    _btnMouseGuide.addEventListener('mouseleave', () => document.body.classList.remove('hovering'));
+  }
+
+  /* Color cycle button */
+  const _btnColor = document.getElementById('btn-color');
+  if (_btnColor) {
+    _btnColor.addEventListener('click', () => {
+      G.colorMode = (G.colorMode + 1) % COLOR_ANGLES.length;
+    });
+    _btnColor.addEventListener('mouseenter', () => document.body.classList.add('hovering'));
+    _btnColor.addEventListener('mouseleave', () => document.body.classList.remove('hovering'));
+  }
 
   document.getElementById('btn-gg-back').addEventListener('click', () => {
     goTo(S.prevStage === 'gestures' ? 'video' : S.prevStage);
