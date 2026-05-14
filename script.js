@@ -79,7 +79,8 @@ class FlowerRenderer {
     this.t         = 0;
     this.petals    = this._buildPetals();
     this.filaments = this._buildFilaments();
-    this.witherOffset = 0; // accumulated droop when withering
+    this.witherOffset    = 0;
+    this.prevRenderBloom = 0;
   }
 
   /* ── build petal data ── */
@@ -309,9 +310,9 @@ class LotusRenderer {
 
   _buildPetals() {
     const cfg = [
-      { li:0, n:8, maxR:210, len:95, w:.82, hb:330, hv:12, Lb:80, Ld:10 },
-      { li:1, n:5, maxR:130, len:70, w:.90, hb:335, hv:8,  Lb:85, Ld:8  },
-      { li:2, n:4, maxR:62,  len:48, w:.95, hb:340, hv:6,  Lb:88, Ld:7  },
+      { li:0, n:8, maxR:210, len:95, w:.52, hb:330, hv:12, Lb:80, Ld:10 },
+      { li:1, n:5, maxR:130, len:70, w:.58, hb:335, hv:8,  Lb:85, Ld:8  },
+      { li:2, n:4, maxR:62,  len:48, w:.65, hb:340, hv:6,  Lb:88, Ld:7  },
     ];
     const out = [];
     cfg.forEach(({ li, n, maxR, len, w, hb, hv, Lb, Ld }) => {
@@ -827,7 +828,19 @@ class BasePetalRenderer {
     ctx.beginPath(); ctx.moveTo(0,-len*0.14);
     ctx.bezierCurveTo(hw*1.05,-len*0.06,hw*1.1,len*0.55,0,len);
     ctx.bezierCurveTo(-hw*1.1,len*0.55,-hw*1.05,-len*0.06,0,-len*0.14);
-    ctx.fill(); ctx.restore();
+    ctx.fill();
+    if (b > 0.3) {
+      ctx.globalAlpha = b * 0.14;
+      ctx.shadowBlur  = 0;
+      ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+      ctx.lineWidth   = 0.5;
+      ctx.lineCap     = 'round';
+      ctx.beginPath();
+      ctx.moveTo(0, -len * 0.1);
+      ctx.quadraticCurveTo(len * 0.04, len * 0.38, 0, len * 0.84);
+      ctx.stroke();
+    }
+    ctx.restore();
   }
   _stamen(bloom,cx,cy){
     if(bloom<0.04)return;
@@ -906,13 +919,13 @@ class JellyfishRenderer {
     ctx.bezierCurveTo(cx+bR*0.65,cy+bH*0.32,cx-bR*0.65,cy+bH*0.32,cx-bR,cy);
     ctx.closePath(); ctx.fill();
     ctx.globalAlpha=bloom*0.65;
-    ctx.strokeStyle='rgba(175,235,255,0.8)'; ctx.lineWidth=1.6; ctx.shadowBlur=16;
+    ctx.strokeStyle='rgba(175,235,255,0.8)'; ctx.lineWidth=1.6; ctx.shadowBlur=isMobile?0:16;
     ctx.beginPath(); ctx.ellipse(cx,cy,bR,bH,0,Math.PI,0,true); ctx.stroke();
     if(bloom>0.35){
       const rA=Math.min(1,(bloom-0.35)*1.8);
       for(let i=1;i<=3;i++){
         ctx.globalAlpha=rA*0.16; ctx.strokeStyle='rgba(195,240,255,0.7)';
-        ctx.lineWidth=0.65; ctx.shadowBlur=5;
+        ctx.lineWidth=0.65; ctx.shadowBlur=0;
         ctx.beginPath();
         ctx.ellipse(cx,cy-bH*0.08,bR*(0.28+i*0.22),bH*(0.28+i*0.22)*0.58,0,Math.PI,0,true);
         ctx.stroke();
@@ -1181,8 +1194,308 @@ class Petal {
   }
 }
 
-function spawnPetals(n, rising) {
-  for (let i = 0; i < n && petals.length < MAX_P; i++) petals.push(new Petal(rising));
+/* ═══════════════════════════════════════════
+   PER-RENDERER PARTICLE CLASSES
+═══════════════════════════════════════════ */
+
+/* Crystal — tiny glinting diamond shards */
+class CrystalSpark {
+  constructor(rising) {
+    const W = cv.width, H = cv.height;
+    this.depth = Math.random();
+    this.size  = 2 + this.depth * 7;
+    this.hue   = 220 + Math.random() * 100;
+    this.rot   = Math.random() * Math.PI;
+    this.rotV  = (Math.random() - 0.5) * 0.045;
+    this.sw    = Math.random() * Math.PI * 2;
+    this.swS   = 0.007 + Math.random() * 0.01;
+    this.swA   = 0.15 + this.depth * 0.55;
+    this.alpha = rising ? 0 : (0.03 + Math.random() * 0.07);
+    this.maxA  = (0.22 + this.depth * 0.42) * (0.7 + Math.random() * 0.3);
+    this.active = true;
+    if (rising) {
+      this.x = W * 0.3 + Math.random() * W * 0.4;
+      this.y = H * 0.5 + (Math.random() - 0.5) * H * 0.22;
+      const sp = 0.8 + this.depth * 2.5, ang = -Math.PI/2 + (Math.random()-0.5)*Math.PI*1.3;
+      this.vx = Math.cos(ang)*sp; this.vy = Math.sin(ang)*sp;
+    } else {
+      this.x  = Math.random() * W; this.y = -this.size - Math.random() * H * 0.5;
+      this.vy = 0.4 + Math.random() * 0.65; this.vx = (Math.random()-0.5) * 0.5;
+    }
+  }
+  update(bloom, withering) {
+    this.sw += this.swS; this.rot += this.rotV;
+    const wx = Math.sin(this.sw) * this.swA;
+    if (bloom > 0.18) {
+      this.vy -= bloom * 0.02 * (0.5 + this.depth);
+      this.vy  = Math.max(this.vy, -(1.6 + this.depth * 2.6));
+      this.alpha = Math.min(this.alpha + 0.009 * bloom, this.maxA);
+    } else {
+      this.vy += withering ? 0.07 : 0.038; this.vy = Math.min(this.vy, 4.5 + this.depth*2.5);
+      this.alpha = Math.max(this.alpha - (withering ? 0.006 : 0.003), 0);
+    }
+    this.vx += wx * 0.008; this.vx *= 0.994;
+    this.x  += this.vx + wx * 0.1; this.y += this.vy;
+    const H = cv.height;
+    if (bloom > 0.18 && this.y < -80) {
+      this.y = H * 0.35 + Math.random() * H * 0.3; this.x = W * 0.25 + Math.random() * W * 0.5;
+      const ang = -Math.PI/2 + (Math.random()-0.5)*Math.PI*1.4, sp = 0.6 + this.depth*2;
+      this.vx = Math.cos(ang)*sp; this.vy = Math.sin(ang)*sp; this.alpha = 0;
+    }
+    if (this.alpha <= 0.002 && this.y > H + 40) this.active = false;
+  }
+  draw() {
+    if (this.alpha < 0.002) return;
+    ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(this.rot);
+    ctx.globalAlpha = this.alpha;
+    const s = this.size;
+    ctx.fillStyle   = `hsl(${this.hue},85%,72%)`;
+    ctx.shadowColor = `hsl(${this.hue},90%,82%)`; ctx.shadowBlur = isMobile ? 0 : 6;
+    ctx.beginPath();
+    ctx.moveTo(0,-s); ctx.lineTo(s*0.42,0); ctx.lineTo(0,s); ctx.lineTo(-s*0.42,0);
+    ctx.closePath(); ctx.fill(); ctx.restore();
+  }
+}
+
+/* Dandelion — floating spore seeds */
+class Spore {
+  constructor(rising) {
+    const W = cv.width, H = cv.height;
+    this.depth = Math.random();
+    this.size  = 2.5 + this.depth * 5.5;
+    this.hue   = 44 + Math.random() * 16;
+    this.rot   = Math.random() * Math.PI * 2;
+    this.rotV  = (Math.random() - 0.5) * 0.013;
+    this.sw    = Math.random() * Math.PI * 2;
+    this.swS   = 0.005 + Math.random() * 0.008;
+    this.swA   = 0.3 + this.depth * 0.95;
+    this.alpha = rising ? 0 : (0.04 + Math.random() * 0.08);
+    this.maxA  = (0.3 + this.depth * 0.5) * (0.7 + Math.random() * 0.3);
+    this.active = true;
+    if (rising) {
+      const sx = 0.22 + this.depth * 0.26;
+      this.x  = W * (0.5 - sx/2) + Math.random() * W * sx;
+      this.y  = H + this.size + Math.random() * 65;
+      const sp = 0.4 + this.depth * 1.8;
+      this.vx = (Math.random()-0.5)*sp; this.vy = -(Math.random()*sp + 0.35);
+    } else {
+      this.x  = Math.random() * W; this.y = -this.size - Math.random() * H * 0.55;
+      this.vy = 0.1 + Math.random() * 0.22; this.vx = (Math.random()-0.5) * 0.35;
+    }
+  }
+  update(bloom, withering) {
+    this.sw += this.swS; this.rot += this.rotV;
+    const wx = Math.sin(this.sw) * this.swA;
+    if (bloom > 0.18) {
+      this.vy -= bloom * 0.032 * (0.5 + this.depth);
+      this.vy  = Math.max(this.vy, -(1.6 + this.depth * 2.8));
+      this.alpha = Math.min(this.alpha + 0.007 * bloom, this.maxA);
+    } else {
+      this.vy += withering ? 0.055 : 0.028; this.vy = Math.min(this.vy, 4.5 + this.depth*2.5);
+      this.alpha = Math.max(this.alpha - (withering ? 0.004 : 0.002), 0);
+    }
+    this.vx += wx * 0.01; this.vx *= 0.993;
+    this.x  += this.vx + wx * 0.12; this.y += this.vy;
+    const H = cv.height;
+    if (bloom > 0.18 && this.y < -100) {
+      this.y = H + this.size + Math.random() * 40; this.x = cv.width * 0.2 + Math.random() * cv.width * 0.6;
+      this.vy = -(Math.random() * (0.5 + this.depth*1.6) + 0.3); this.alpha = 0;
+    }
+    if (this.alpha <= 0.002 && this.y > H + 50) this.active = false;
+  }
+  draw() {
+    if (this.alpha < 0.002) return;
+    ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(this.rot);
+    ctx.globalAlpha = this.alpha;
+    const s = this.size;
+    ctx.fillStyle = `hsl(${this.hue},70%,84%)`;
+    ctx.beginPath(); ctx.arc(0, 0, s*0.27, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = `hsl(${this.hue},60%,76%)`; ctx.lineWidth = 0.45; ctx.lineCap = 'round';
+    for (let i=0; i<6; i++) {
+      const a = (i/6)*Math.PI*2, rl = i%2===0 ? s : s*0.6;
+      ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(Math.cos(a)*rl, Math.sin(a)*rl); ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+
+/* Jellyfish — rising translucent bubbles */
+class Bubble {
+  constructor(rising) {
+    const W = cv.width, H = cv.height;
+    this.depth = Math.random();
+    this.size  = 3 + this.depth * 12;
+    this.hue   = 188 + Math.random() * 28;
+    this.sw    = Math.random() * Math.PI * 2;
+    this.swS   = 0.008 + Math.random() * 0.009;
+    this.swA   = 0.4 + this.depth * 1.3;
+    this.alpha = rising ? 0 : (0.02 + Math.random() * 0.05);
+    this.maxA  = (0.1 + this.depth * 0.2) * (0.7 + Math.random() * 0.3);
+    this.active = true;
+    if (rising) {
+      this.x  = W * 0.15 + Math.random() * W * 0.7;
+      this.y  = H + this.size + Math.random() * 80;
+      this.vy = -(0.5 + this.depth * 1.5); this.vx = (Math.random()-0.5) * 0.5;
+    } else {
+      this.x  = Math.random() * W; this.y = H * 0.5 + Math.random() * H * 0.6;
+      this.vy = -(0.2 + Math.random() * 0.35); this.vx = (Math.random()-0.5) * 0.3;
+    }
+  }
+  update(bloom, withering) {
+    this.sw += this.swS;
+    const wx = Math.sin(this.sw) * this.swA;
+    if (bloom > 0.18) {
+      this.vy -= bloom * 0.015; this.vy = Math.max(this.vy, -(2.2 + this.depth*2));
+      this.alpha = Math.min(this.alpha + 0.005 * bloom, this.maxA);
+    } else {
+      this.vy += 0.01; this.vy = Math.min(this.vy, -0.05);
+      this.alpha = Math.max(this.alpha - (withering ? 0.005 : 0.002), 0);
+    }
+    this.vx += wx * 0.01; this.vx *= 0.995;
+    this.x  += this.vx + wx * 0.08; this.y += this.vy;
+    if (this.y < -this.size - 20) {
+      if (bloom > 0.15) {
+        this.y = cv.height + this.size + Math.random() * 60;
+        this.x = cv.width * 0.2 + Math.random() * cv.width * 0.6;
+        this.vy = -(0.4 + this.depth * 1.2); this.alpha = 0;
+      } else { this.active = false; }
+    }
+    if (this.alpha <= 0.002) this.active = false;
+  }
+  draw() {
+    if (this.alpha < 0.002) return;
+    ctx.save(); ctx.translate(this.x, this.y); ctx.globalAlpha = this.alpha;
+    const s = this.size;
+    ctx.strokeStyle = `hsl(${this.hue},70%,78%)`; ctx.lineWidth = 0.8 + this.depth * 0.5;
+    ctx.shadowColor = `hsl(${this.hue},80%,82%)`; ctx.shadowBlur = isMobile ? 0 : 5;
+    ctx.beginPath(); ctx.arc(0, 0, s, 0, Math.PI*2); ctx.stroke();
+    ctx.globalAlpha = this.alpha * 0.5;
+    ctx.fillStyle = `hsl(${this.hue},60%,92%)`;
+    ctx.beginPath(); ctx.arc(-s*0.28,-s*0.28, s*0.22, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+}
+
+/* Snowflake — drifting ice micro-crystals */
+class SnowDrift {
+  constructor(rising) {
+    const W = cv.width, H = cv.height;
+    this.depth = Math.random();
+    this.size  = 1.5 + this.depth * 4.5;
+    this.rot   = Math.random() * Math.PI;
+    this.rotV  = (Math.random() - 0.5) * 0.008;
+    this.sw    = Math.random() * Math.PI * 2;
+    this.swS   = 0.005 + Math.random() * 0.007;
+    this.swA   = 0.5 + this.depth * 1.6;
+    this.alpha = rising ? 0 : (0.05 + Math.random() * 0.1);
+    this.maxA  = (0.32 + this.depth * 0.46) * (0.7 + Math.random() * 0.3);
+    this.active = true;
+    if (rising) {
+      this.x  = W * 0.28 + Math.random() * W * 0.44;
+      this.y  = H * 0.35 + Math.random() * H * 0.3;
+      this.vy = -(0.3 + this.depth * 0.9); this.vx = (Math.random()-0.5) * 1.1;
+    } else {
+      this.x  = Math.random() * W; this.y = -this.size - Math.random() * H * 0.5;
+      this.vy = 0.22 + Math.random() * 0.42; this.vx = (Math.random()-0.5) * 0.4;
+    }
+  }
+  update(bloom, withering) {
+    this.sw += this.swS; this.rot += this.rotV;
+    const wx = Math.sin(this.sw) * this.swA;
+    if (bloom > 0.2) {
+      this.vy -= bloom * 0.018; this.vy = Math.max(this.vy, -(0.9 + this.depth*1.6));
+      this.alpha = Math.min(this.alpha + 0.009 * bloom, this.maxA);
+    } else {
+      this.vy += withering ? 0.08 : 0.04; this.vy = Math.min(this.vy, 3.5 + this.depth*2);
+      this.alpha = Math.max(this.alpha - (withering ? 0.005 : 0.0025), 0);
+    }
+    this.vx += wx * 0.006; this.vx *= 0.996;
+    this.x  += this.vx + wx * 0.09; this.y += this.vy;
+    const H = cv.height;
+    if (bloom > 0.2 && this.y < -60) {
+      this.y = H * 0.25 + Math.random() * H * 0.5; this.x = cv.width * 0.15 + Math.random() * cv.width * 0.7;
+      this.vy = -(0.2 + this.depth * 0.75); this.vx = (Math.random()-0.5) * 0.85; this.alpha = 0;
+    }
+    if (this.alpha <= 0.002 && this.y > H + 40) this.active = false;
+  }
+  draw() {
+    if (this.alpha < 0.002) return;
+    ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(this.rot);
+    ctx.globalAlpha = this.alpha;
+    const s = this.size;
+    ctx.strokeStyle = 'rgba(210,238,255,0.92)'; ctx.lineWidth = 0.55 + this.depth * 0.4;
+    ctx.lineCap = 'round'; ctx.shadowColor = 'rgba(190,225,255,0.7)'; ctx.shadowBlur = isMobile ? 0 : 4;
+    for (let i=0; i<3; i++) {
+      const a = (i/3)*Math.PI;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a)*s, Math.sin(a)*s); ctx.lineTo(Math.cos(a+Math.PI)*s, Math.sin(a+Math.PI)*s);
+      ctx.stroke();
+    }
+    ctx.fillStyle = 'rgba(225,245,255,0.9)';
+    ctx.beginPath(); ctx.arc(0, 0, s*0.18, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+}
+
+/* Orbit — sparks from electron trails */
+class OrbitalSpark {
+  constructor(rising) {
+    const W = cv.width, H = cv.height;
+    this.depth = Math.random();
+    this.size  = 1.5 + this.depth * 3.5;
+    const ci = Math.floor(Math.random() * 3);
+    this.clr = ['hsl(44,95%,72%)','hsl(196,85%,72%)','hsl(270,80%,75%)'][ci];
+    this.glw = ['hsl(44,95%,82%)','hsl(196,85%,82%)','hsl(270,80%,84%)'][ci];
+    this.sw    = Math.random() * Math.PI * 2;
+    this.swS   = 0.01 + Math.random() * 0.012;
+    this.swA   = 0.2 + this.depth * 0.8;
+    this.alpha = rising ? 0 : (0.04 + Math.random() * 0.08);
+    this.maxA  = (0.45 + this.depth * 0.45) * (0.6 + Math.random() * 0.4);
+    this.active = true;
+    if (rising) {
+      const ang = Math.random() * Math.PI * 2, sp = 1.0 + this.depth * 3.5;
+      this.x  = W/2 + (Math.random()-0.5)*70; this.y = H/2 + (Math.random()-0.5)*70;
+      this.vx = Math.cos(ang)*sp; this.vy = Math.sin(ang)*sp;
+    } else {
+      this.x  = Math.random() * W; this.y = Math.random() * H;
+      this.vx = (Math.random()-0.5)*0.5; this.vy = (Math.random()-0.5)*0.5;
+    }
+  }
+  update(bloom, withering) {
+    this.sw += this.swS;
+    const wx = Math.sin(this.sw) * this.swA;
+    if (bloom > 0.18) {
+      this.vx *= 0.97; this.vy *= 0.97;
+      this.alpha = Math.min(this.alpha + 0.012 * bloom, this.maxA);
+    } else {
+      this.vx *= 0.985; this.vy *= 0.985;
+      this.alpha = Math.max(this.alpha - (withering ? 0.007 : 0.003), 0);
+    }
+    this.x += this.vx + wx * 0.08; this.y += this.vy;
+    const W = cv.width, H = cv.height;
+    if (bloom > 0.18 && (this.x < -50 || this.x > W+50 || this.y < -50 || this.y > H+50)) {
+      const ang = Math.random()*Math.PI*2, sp = 0.8 + this.depth*3;
+      this.x  = W/2 + (Math.random()-0.5)*80; this.y = H/2 + (Math.random()-0.5)*80;
+      this.vx = Math.cos(ang)*sp; this.vy = Math.sin(ang)*sp; this.alpha = 0;
+    }
+    if (this.alpha <= 0.002) this.active = false;
+  }
+  draw() {
+    if (this.alpha < 0.002) return;
+    ctx.save(); ctx.translate(this.x, this.y); ctx.globalAlpha = this.alpha;
+    ctx.shadowColor = this.glw; ctx.shadowBlur = isMobile ? 0 : 8;
+    ctx.fillStyle = this.clr;
+    ctx.beginPath(); ctx.arc(0, 0, this.size, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+}
+
+/* indexed by renderer: 0=Peony 1=Lotus 2=Crystal 3=Dandelion 4=Rose 5=Jellyfish 6=Snowflake 7=Orbit */
+const PARTICLE_CLASSES = [Petal, Petal, CrystalSpark, Spore, Petal, Bubble, SnowDrift, OrbitalSpark];
+
+function spawnParticles(n, rising) {
+  const Cls = PARTICLE_CLASSES[activeRendererIdx] || Petal;
+  for (let i = 0; i < n && petals.length < MAX_P; i++) petals.push(new Cls(rising));
 }
 
 /* ═══════════════════════════════════════════
@@ -1361,11 +1674,11 @@ function detectGesture(lm) {
 function handleGestureChange(gesture) {
   G.gestLabel = GESTURE_LABELS[gesture] || '';
   if (gesture === 'peace' && Date.now() - G.lastStorm > 1800) {
-    spawnPetals(62, true);
+    spawnParticles(62, true);
     G.lastStorm = Date.now();
   }
   if (gesture === 'thumbsup' && Date.now() - G.lastBoost > 2000) {
-    spawnPetals(40, true);
+    spawnParticles(40, true);
     G.lastBoost = Date.now();
   }
   /* rock: handled via dwell timer in onResults, not here */
@@ -1497,7 +1810,7 @@ let mouseListenersAdded = false;
 
 function enableMouse() {
   S.mode = 'mouse';
-  setStatus('Hold to wither · Release to bloom', false);
+  setStatus('Hold to wither · Click to bloom', false);
   updateModeUI('mouse');
 
   if (mouseListenersAdded) return;
@@ -1537,9 +1850,18 @@ function enableMouse() {
     showHoldIndicator(false);
   }, { passive: false });
 
+  /* 알림/전화 등으로 터치 취소 시 wither 고착 방지 */
+  document.addEventListener('touchcancel', () => {
+    if (S.mode !== 'mouse') return;
+    S.mouseHeld = false;
+    S.mouseHeldAt = 0;
+    setTarget(1);
+    showHoldIndicator(false);
+  });
+
   document.addEventListener('dblclick', e => {
     if (skip(e) || S.mode !== 'mouse' || S.stage !== 'interact') return;
-    spawnPetals(62, true);
+    spawnParticles(62, true);
     setTarget(1);
   });
 
@@ -1736,7 +2058,9 @@ function loop(now) {
 
   /* color / parallax only needed in interact stage */
   if (S.stage === 'interact') {
-    const _tHue = COLOR_ANGLES[G.colorMode];
+    let _tHue = COLOR_ANGLES[G.colorMode];
+    /* always lerp forward — prevents -237° backward sweep (e.g. purple→gold) */
+    while (_tHue < G.colorAngle - 90) _tHue += 360;
     G.colorAngle += (_tHue - G.colorAngle) * 0.035;
     const _newFilter = Math.abs(G.colorAngle) > 0.5 ? `hue-rotate(${G.colorAngle.toFixed(1)}deg)` : '';
     if (_newFilter !== _lastFilterStr) { cv.style.filter = _newFilter; _lastFilterStr = _newFilter; }
@@ -1772,12 +2096,12 @@ function loop(now) {
 
   /* burst on open threshold */
   if (S.bloom > 0.72 && S.prevBloom <= 0.72 && petals.length < MAX_P-25) {
-    spawnPetals(24, true);
+    spawnParticles(24, true);
   }
 
   /* burst of falling petals when withering starts */
   if (withering && S.prevBloom > 0.5 && S.bloom < 0.5 && petals.length < MAX_P-30) {
-    spawnPetals(18, false);
+    spawnParticles(18, false);
   }
 
   S.prevBloom = S.bloom;
@@ -1811,11 +2135,11 @@ function loop(now) {
   if (onInteract) {
     const rate = Math.ceil(S.bloom * 3 + 0.4);
     if (S.frame % Math.max(1, 7-rate) === 0) {
-      spawnPetals(rate, S.bloom > 0.18);
+      spawnParticles(rate, S.bloom > 0.18);
     }
     /* extra falling petals while actively withering */
     if (withering && S.frame % 4 === 0 && petals.length < MAX_P) {
-      spawnPetals(2, false);
+      spawnParticles(2, false);
     }
   }
 

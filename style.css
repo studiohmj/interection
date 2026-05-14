@@ -1055,10 +1055,10 @@ body.hovering #cursor {
   /* ── INTERACT ── */
   .tracking-ui    { top: 16px; right: 16px; font-size: 10px; letter-spacing: 2px; }
   .btn-end           { top: 16px; left: 16px; font-size: 12px; }
-  .btn-guide-row     { top: 16px; gap: 6px; }
+  .btn-guide-row     { top: 44px; gap: 6px; }  /* 2nd row to avoid overlap with tracking-ui */
   .btn-guide         { font-size: 9px; padding: 5px 10px; letter-spacing: 2px; }
-  .btn-color         { top: 52px; font-size: 9px; padding: 5px 12px; letter-spacing: 2px; }
-  .gest-indicator    { top: 90px; font-size: 9px; padding: 5px 12px; letter-spacing: 3px; }
+  .btn-color         { top: 78px; font-size: 9px; padding: 5px 12px; letter-spacing: 2px; }
+  .gest-indicator    { top: 114px; font-size: 9px; padding: 5px 12px; letter-spacing: 3px; }
   .bloom-bar-wrap { left: 10px; }
   .bloom-bar-track{ height: 100px; }
   .cam-preview    { width: 140px; height: 105px; bottom: 24px; left: 16px; }
